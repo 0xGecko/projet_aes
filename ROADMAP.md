@@ -27,20 +27,4 @@
 
 ## Phase 6 : Extensions (bonus si j'ai le temps)
 - [ ] Ajouter les mode CBC, CFB (ou OFB) et GCM.
-- [ ] Supporter les clés de 192 et 256 bits.    
-
-# Branches de mon projet
-
-projet_aes/
-├── .git/              <- (Déjà créé, caché)
-├── .gitignore         <- Pour ignorer les fichiers compilés (.o)
-├── Makefile           <- Pour compiler tout le projet facilement
-├── README.md          <- Présentation du projet
-├── ROADMAP.md         <- La feuille de route
-├── doc/               <- Pour le compte-rendu final et la notice
-├── include/           <- Les fichiers d'en-tête (.h)
-│   └── aes.h          <- Déclarations des types (uint8_t) et fonctions
-├── src/               <- Les fichiers source (.c)
-│   ├── aes.c          <- La logique de l'algorithme (les calculs mathématiques)
-│   └── main.c         <- Le point d'entrée, où sera utiliser getopt()
-└── tests/             <- Fichiers de test (ex: alice.sage, scripts de temps)
+- [ ] Supporter les clés de 192 et 256 bits.

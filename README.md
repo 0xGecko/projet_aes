@@ -21,10 +21,12 @@ Le projet utilise un `Makefile` pour faciliter la compilation. Pour compiler le 
 ```bash
 make
 ```
+
 ## 💻 Utilisation
 (Cette section sera mis à jour une fois que les options de la ligne de commande seront définies dans le main.c)
-
+```bash
 ./aes [options] fichier_entree fichier_sortie
+```
 
 ## 👤 Auteur
 - Alexandre ACCIARI
