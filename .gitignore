@@ -1,1 +1,13 @@
+# Fichiers objets compilés
 *.o
+src/*.o
+tests/*.o
+
+# Exécutables
+tests/test_aes
+aes
+*.out
+
+# Fichiers propres à l'OS (Mac/Windows) ou à l'IDE
+.DS_Store
+.vscode/

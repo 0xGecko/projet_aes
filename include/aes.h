@@ -14,5 +14,8 @@ typedef uint8_t stat_t[4][NB];
 
 // Prototype de notre fonction d'initialisation
 void init_state(const uint8_t in[16], stat_t state);
+
+// Prototype pour pouvoir afficher notre État 
+void print_state(const stat_t state);
     
 #endif /* AES_H */
