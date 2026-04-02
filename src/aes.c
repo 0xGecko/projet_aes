@@ -31,7 +31,7 @@ La copie se fait colonne par colonne, conformément au standard FIPS-197.
     in    : Le tableau d'entrée d'une dimension (16 octets).
     state : La matrice d'état de 4 lignes et colonnes qui sera modifiée.
 */
-void init_state(const uint8_t in[16], stat_t state) {
+void init_state(const uint8_t in[16], state_t state) {
     // On parcout chaque colonne
     for (int c = 0; c < NB; c++) {
         // Pour chaque colonne, on parcourt chaque ligne
@@ -43,11 +43,11 @@ void init_state(const uint8_t in[16], stat_t state) {
 }
 
 /*
-Fonction  : print_state
------------------------
+Fonction : print_state
+----------------------
 Affiche la matrice d'état sous forme de grille 4x4 en hexadécimal.
 */
-void print_state(const stat_t state) {
+void print_state(const state_t state) {
     for (int r = 0; r < 4; r++) {
         for (int c = 0; c < NB; c++) {
             // %02x affiche un nombre en héxadécimal (x) sur 2 caractères avec un 0 devant si besoin
@@ -56,4 +56,110 @@ void print_state(const stat_t state) {
         printf("\n");
     }
     printf("\n");
+}
+
+/*
+Fonction : sub_bytes
+--------------------
+Applique la subtitution non-linéaire (S-box) à chaque octet de l'État.
+*/
+void sub_bytes(state_t state) {
+    // On parcourt chaque colonne
+    for (int c = 0; c < NB; c++) {
+        // On parcourt chaque ligne
+        for (int r = 0; r < 4; r++) {
+            // Remplacement de l'octet par sa valeur dans la S-box.
+            state[r][c] = sbox[state[r][c]];
+        }
+    }
+}
+
+/*
+Fonction : shift_rows
+---------------------
+Effectue un décalage cyclique vers la gauche des lignes de l'État.
+Ligne 0 : pas de décalage
+Ligne 1 : décalage de 1
+Ligne 2 : décalage de 2
+Ligne 3 : décalage de 3
+*/
+void shift_rows(state_t state) {
+    uint8_t temp;
+
+    // Ligne 1 : Décalage de 1 vers la gauche
+    temp = state[1][0];
+    state[1][0] = state[1][1];
+    state[1][1] = state[1][2];
+    state[1][2] = state[1][3];
+    state[1][3] = temp;
+
+    // Ligne 2 : Décalage de 2 vers la gauche
+    temp = state[2][0];
+    state[2][0] = state[2][2];
+    state[2][2] = temp;
+    temp = state[2][1];
+    state[2][1] = state[2][3];
+    state[2][3] = temp;
+
+    // Ligne 3 : Décalage de 3 vers la gauche
+    temp = state[3][3];
+    state[3][3] = state[3][2];
+    state[3][2] = state[3][1];
+    state[3][1] = state[3][0];
+    state[3][0] = temp;
+}
+
+/*
+Fonction utilitaire : xtime
+Multiplie un octet par 2 dans le corps de Galois GF(2^8).
+*/
+static uint8_t xtime(uint8_t x) {
+    // Si le bit de poids fort est 1, on décale et on XOR avec 01xb
+    // Sinon, on fait juste un décalage
+    return (x & 0x80) ? (x << 1) ^ 0x1b : (x << 1);
+}
+
+/*
+Fonction  : mix_columns
+Mélange les données de chaque colonne de l'État de manière indépendante.
+*/
+void mix_columns(state_t state) {
+    uint8_t col[4];
+
+    // On parcourt chaque colonne
+    for (int c = 0; c < NB; c++) {
+        // On sauvegarde la colonne d'origine car on va écraser les valeurs de 'state'
+        for (int r = 0; r < 4; r++) {
+            col[r] = state[r][c];
+        }
+
+        // On applique les calculs mathématiques (XOR et xtime)
+        // Ligne 0 : (2 * c0) ^ (3 * c1) ^ (1 * c2) ^ (1 * c3)
+        state[0][c] = xtime(col[0]) ^ (xtime(col[1]) ^ col[1]) ^ col[2] ^ col[3];
+
+        // Ligne 1 : (1 * c0) ^ (2 * c1) ^ (3 * c2) ^ (1 * c3)
+        state[1][c] = col[0] ^ xtime(col[1]) ^ (xtime(col[2]) ^ col[2]) ^ col[3];
+
+        // Ligne 2 : (1 * c0) ^ (1 * c1) ^ (2 * c2) ^ (3 * c3)
+        state[2][c] = col[0] ^ col[1] ^ xtime(col[2]) ^ (xtime(col[3]) ^ col[3]);
+
+        // Ligne 3 : (3 * c0) ^ (1 * c1) ^ (1 * c2) ^ (2 * c3)
+        state[3][c] = (xtime(col[0]) ^ col[0]) ^ col[1] ^ col[2] ^ xtime(col[3]);
+    }
+}
+
+/*
+Fonction : add_round_key
+------------------------
+Applique la clé à chaque octet de l'État.
+*/
+void add_round_key(state_t state, const uint8_t round_key[4][NB]) {
+    // On parcourt chaque colonne 
+    for (int c = 0; c < NB; c++) {
+        // On parcourt chaque ligne
+        for (int r = 0; r < 4; r++) {
+            // On applique le XOR entre la case de l'État et la case de la clé
+            state[r][c] ^= round_key[r][c];
+        }
+    }
 }

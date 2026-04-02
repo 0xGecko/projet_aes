@@ -10,12 +10,24 @@
 
 // Définition de notre type pour l'État (State)
 // Un tableau 2D de 4 lignes et 4 colonnes d'octets
-typedef uint8_t stat_t[4][NB];
+typedef uint8_t state_t[4][NB];
 
 // Prototype de notre fonction d'initialisation
-void init_state(const uint8_t in[16], stat_t state);
+void init_state(const uint8_t in[16], state_t state);
 
 // Prototype pour pouvoir afficher notre État 
-void print_state(const stat_t state);
+void print_state(const state_t state);
+
+// Prototype de la fonction de substitution des octets (S-box)
+void sub_bytes(state_t state);
+
+// Prototype de la fonction de décalage des lignes
+void shift_rows(state_t state);
+
+// Prototype de l'ajout de la clé
+void add_round_key(state_t state, const uint8_t round_key[4][NB]);
+
+// Prototype du mélange des colonnes
+void mix_columns(state_t state);
     
 #endif /* AES_H */
