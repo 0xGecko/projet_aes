@@ -2,8 +2,8 @@
 
 ## Phase 1 : Chiffrement de base (AES-128)
 - [x] Créer les structures de données (État, clé).
-- [ ] Implémenter la fonction d'expansion de clé (KeyExpansion).
 - [x] Implémenter les transformations de base : 'SubBytes', 'ShiftRows', 'MixColumns', 'AddRoundKey'.
+- [x] Implémenter la fonction d'expansion de clé (KeyExpansion).
 - [ ] Assembler ces fonctions pour chiffrer **un seul bloc** avec une clé de 128 bits.
 
 ## Phase 2 : Déchiffrement de base

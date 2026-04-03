@@ -29,5 +29,8 @@ void add_round_key(state_t state, const uint8_t round_key[4][NB]);
 
 // Prototype du mélange des colonnes
 void mix_columns(state_t state);
+
+// Prototype de l'expansion de la clé
+void key_expansion(const uint8_t key[16], uint8_t w[44][4]);
     
 #endif /* AES_H */

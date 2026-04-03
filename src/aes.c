@@ -22,6 +22,17 @@ static const uint8_t sbox[256] = {
     0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
 };
 
+/* Tableau des constantes de tour (Rcon) pour l'AES-128
+On place 0x00 à l'indice 0 pour que rcon[1] corresponde bien au Round 1.
+-----------
+Remarque : 
+Rcon est censé être un mot de 4 octets de type [x, 0, 0, 0], mais vu que seuls
+les premiers octets changent, on ne stocke que ce premier octet en C (petite économie de place)
+*/
+static const uint8_t rcon[11] = {
+    0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36
+};
+
 /*
 Fonction : init_state
 ---------------------
@@ -162,4 +173,56 @@ void add_round_key(state_t state, const uint8_t round_key[4][NB]) {
             state[r][c] ^= round_key[r][c];
         }
     }
+}
+
+/*
+Fonction : key_expansion
+------------------------
+Étend la clé initiale de 16 octets en 44 mots (words) de 4 octets (pour 11 clés de rounds).
+*/
+void key_expansion(const uint8_t key[16], uint8_t w[44][4]) {
+        uint8_t temp[4];
+
+        // 1. Les 4 premiers mots (i < Nk = 4) sont simplement la clé d'origine
+        for (int i = 0; i < 4; i++) {
+            w[i][0] = key[4 * i];
+            w[i][1] = key[4 * i + 1];
+            w[i][2] = key[4 * i + 2];
+            w[i][3] = key[4 * i + 3];
+        }
+
+        // 2. Calcul des 40 mots suivants (i de 4 à 43)
+        for (int i = 4; i < 44; i++) {
+            // On copie le mot précédent dans temp
+            temp[0] = w[i - 1][0];
+            temp[1] = w[i - 1][1];
+            temp[2] = w[i - 1][2];
+            temp[3] = w[i - 1][3];
+            
+            // Tous les 4 mots (i.e. début d'un nouveau round), on applique la transformation spéciale 
+            // dans le pseudo-code de la Fig 11.
+            if (i % 4 == 0) {
+                // a) Rotword : décalage cycle d'un octet vers la gauche
+                uint8_t t = temp[0];
+                temp[0] = temp[1];
+                temp[1] = temp[2];
+                temp[2] = temp[3];
+                temp[3] = t;
+
+                // b) Subword : on passe chaque octet dans la S-box
+                temp[0] = sbox[temp[0]];
+                temp[1] = sbox[temp[1]];
+                temp[2] = sbox[temp[2]];
+                temp[3] = sbox[temp[3]];
+
+                // c) XOR avec la constante de Round (Rcon) sur le premier octet
+                temp[0] ^= rcon[i / 4];
+            }
+
+            // 3. On génère le nouveau mot en faisant un XOR avec le mot de 4 crans en arrière
+            w[i][0] = w[i - 4][0] ^ temp[0];
+            w[i][1] = w[i - 4][1] ^ temp[1];
+            w[i][2] = w[i - 4][2] ^ temp[2];
+            w[i][3] = w[i - 4][3] ^ temp[3];
+        }
 }

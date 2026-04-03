@@ -65,7 +65,7 @@ int main() {
     print_state(state);
 
     /*
-    RESULTAT ATTENDU (Début du Round 1 sur ton image) :
+    RESULTAT ATTENDU (Début du Round 1 du FIPS 197) :
     19 a0 9a e9 
     3d f4 c6 f8 
     e3 e2 8d 48 
@@ -84,12 +84,42 @@ int main() {
     print_state(state);
 
     /*
-    RESULTAT ATTENDU (Ligne 'Round 1', 4ème case de ton image) :
+    RESULTAT ATTENDU (Ligne 'Round 1', 4ème case du FIPS 197) :
     04 e0 48 28 
     66 cb f8 06 
     81 19 d3 26 
     e5 9a 7a 4c 
-     */
+    */
+    
+    printf("--- Test de KeyExpansion ---\n\n");
+
+    // Clé d'exemple de l'annexe A.1
+    uint8_t cipher_key[16] = {
+        0x2b, 0x7e, 0x15, 0x16,
+        0x28, 0xae, 0xd2, 0xa6,
+        0xab, 0xf7, 0x15, 0x88,
+        0x09, 0xcf, 0x4f, 0x3c
+    };
+
+    // Notre tableau pour stocker les 44 mots
+    uint8_t w[44][4];
+
+    // On lance l'expansion
+    key_expansion(cipher_key, w);
+
+    // On check la toute dernière clé (Round 10), qui correspond aux 4 derniers mots (w[40] à w[43])
+    printf("Cle du Round 10 :\n");
+    for (int i = 40; i < 44; i++) {
+        printf("%02x %02x %02x %02x\n", w[i][0], w[i][1], w[i][2], w[i][3]);
+    }
+
+    /*
+    RESULTAT ATTENDU (Annexe A.1, fin du tableau) :
+    d0 14 f9 a8
+    c9 ee 25 89
+    e1 3f 0c c8
+    b6 63 0c a6
+    */
 
     return 0;
 }
