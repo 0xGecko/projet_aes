@@ -226,3 +226,63 @@ void key_expansion(const uint8_t key[16], uint8_t w[44][4]) {
             w[i][3] = w[i - 4][3] ^ temp[3];
         }
 }
+
+/*
+Fonction : aes_cipher
+---------------------
+Chiffre un bloc de 16 octets avec une clé de 16 octets.
+*/
+void aes_cipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]) {
+    state_t state;
+    uint8_t w[44][4];
+    uint8_t current_key[4][NB   ]; // Cela nous permettra de formater la clé pour add_round_key
+
+    // 1. Expansion de la clé
+    key_expansion(key, w);
+
+    // 2. Initialisation de l'État avec le texte clair
+    init_state(in, state);
+
+    // --- ROUND 0 ---
+    // On extrait la clé du Round 0 (les 4 premiers mots de w)
+    for (int c = 0; c < NB; c++) {
+        for (int r = 0; r < 4; r++) {
+            current_key[r][c] = w[c][r];
+        }
+    }
+    add_round_key(state, current_key);
+    
+    // --- ROUND 1 à 9 ---
+    for (int round = 1; round < NR; round++) {
+        sub_bytes(state);
+        shift_rows(state);
+        mix_columns(state);
+        
+        // Extraction de la clépour le round en cours (mots : round*4 à round*4 + 3)
+        for (int c = 0; c < NB; c++) {
+            for (int r = 0; r < 4; r++) {
+                current_key[r][c] = w[round * 4 + c][r];
+            }
+        }
+        add_round_key(state, current_key);
+    }
+
+    // --- ROUND 10 ---
+    sub_bytes(state);
+    shift_rows(state);
+
+    // Extration de la clé du dernier round (mots : 40 à 43)
+    for (int c = 0; c < NB; c++) {
+        for (int r = 0; r < 4; r++) {
+            current_key[r][c] = w[NR * 4 + c][r];
+        }
+    }
+    add_round_key(state, current_key);
+
+    // 3. Copie de l'État final dans un tableau de sortie 'out'
+    for (int c = 0; c < NB; c++) {
+        for (int r = 0; r < 4; r++) {
+            out[r + 4 * c] = state[r][c];
+        }
+    }
+}

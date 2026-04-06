@@ -32,5 +32,9 @@ void mix_columns(state_t state);
 
 // Prototype de l'expansion de la clé
 void key_expansion(const uint8_t key[16], uint8_t w[44][4]);
+
+// Fonction principale de chiffrement (AES-128)
+void aes_cipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]);
+
     
 #endif /* AES_H */

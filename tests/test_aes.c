@@ -121,5 +121,28 @@ int main() {
     b6 63 0c a6
     */
 
+    printf("\n\n--- Test final : Chiffrement Complet (AES-128) ---\n");
+
+    uint8_t out[16];
+
+    aes_cipher(input, cipher_key, out);
+
+    printf("Ciphertext :\n");
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            printf("%02x ", out[c + 4 * r]);
+        }
+        printf("\n");
+    }
+    printf("\n\n");
+
+    /*
+    RESULTAT ATTENDU (Annexe B, fin du tableau) :
+    39 02 dc 19
+    25 dc 11 6a
+    84 09 85 0b
+    1d fb 97 32
+    */
+
     return 0;
 }
