@@ -36,5 +36,17 @@ void key_expansion(const uint8_t key[16], uint8_t w[44][4]);
 // Fonction principale de chiffrement (AES-128)
 void aes_cipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]);
 
-    
+// Prototype de la fonction inverse de substitution des octets (avec S-box inverse)
+void inv_sub_bytes(state_t state);
+
+// Prototype de la fonction inverse de décalage des lignes
+void inv_shift_rows(state_t state);
+
+// Prototype inverse du mélange des colonnes
+void inv_mix_columns(state_t state);
+
+// Fonction principale de déchiffrement (AES-128)
+void aes_decipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]);
+
+
 #endif /* AES_H */

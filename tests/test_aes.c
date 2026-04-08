@@ -144,5 +144,89 @@ int main() {
     1d fb 97 32
     */
 
+    printf("--- Test de InvSubBytes ---\n\n");
+
+    // On réinitialise l'état avec notre texte clair de départ
+    init_state(input, state);
+    printf("1. Etat de depart :\n");
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) printf("%02x ", state[r][c]);
+        printf("\n");
+    }
+    printf("\n");
+
+    // On applique SubBytes et InvSubBytes
+    sub_bytes(state);
+    inv_sub_bytes(state);
+
+    printf("3. Etat apres InvSubBytes :\n");
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) printf("%02x ", state[r][c]);
+        printf("\n");
+    }
+    printf("\n");
+
+    /*
+    RESULTAT ATTENDU :
+    32 88 31 e0 
+    43 5a 31 37 
+    f6 30 98 07 
+    a8 8d a2 34 
+    */
+
+    printf("--- Test de InvShiftRows ---\n\n");
+
+    init_state(input, state);
+    shift_rows(state);
+    inv_shift_rows(state);
+
+    printf("Etat après ShiftRows puis InvShiftRows :\n");
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < NB; c++) {
+            printf("%02x ", state[r][c]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+
+    printf("--- Test de InvMixColumns ---\n\n");
+
+    init_state(input, state);
+    mix_columns(state);
+    inv_mix_columns(state);
+
+    printf("Etat après MixColumns puis InvMixColumns :\n");
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < NB; c++) {
+            printf("%02x ", state[r][c]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+
+    printf("\n\n--- Test final : Déhiffrement Complet (AES-128) ---\n");
+
+    uint8_t decrypted[16];
+
+    aes_decipher(out, cipher_key, decrypted);
+
+    printf("Text déchiffré :\n");
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            printf("%02x ", decrypted[c + 4 * r]);
+        }
+        printf("\n");
+    }
+    printf("\n\n");
+
+    /*
+    RESULTAT ATTENDU (Annexe B, fin du tableau) :
+    32 88 31 e0 
+    43 5a 31 37 
+    f6 30 98 07 
+    a8 8d a2 34 
+    */
+
+    
     return 0;
 }

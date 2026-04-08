@@ -7,8 +7,8 @@
 - [x] Assembler ces fonctions pour chiffrer **un seul bloc** avec une clé de 128 bits.
 
 ## Phase 2 : Déchiffrement de base
-- [ ] Implémenter les transformations inverses : 'InvShiftRows', 'InvSubBytes', 'InvMixColumns'.
-- [ ] Assembler ces fonctions pour déchiffrer **un seul bloc**.
+- [x] Implémenter les transformations inverses : 'InvShiftRows', 'InvSubBytes', 'InvMixColumns'.
+- [x] Assembler ces fonctions pour déchiffrer **un seul bloc**.
 
 ## Phase 3 : Chiffrement de document (Mode ECB)
 - [ ] Créer une fonction pour lire un fichier blocs par blocs de 16 octets.
