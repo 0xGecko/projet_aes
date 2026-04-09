@@ -1,34 +1,33 @@
-# Compilateur et options
 CC = gcc
 CFLAGS = -Wall -Wextra -g -Iinclude
 
-# Dossiers
-SRC_DIR = src
-TEST_DIR = tests
+# L'exécutable principal (pour le projet)
+TARGET = aes
+# L'exécutable de test
+TEST_TARGET = tests/test_aes
 
-# Fichiers sources et objets
-SRC = $(SRC_DIR)/aes.c
-OBJ = $(SRC:.c=.o)
+# Les fichiers sources
+SRC_AES = src/aes.c
+SRC_MAIN = src/main.c
+SRC_TEST = tests/test_aes.c
 
-TEST_SRC = $(TEST_DIR)/test_aes.c
-TEST_OBJ = $(TEST_SRC:.c=.o)
+# Les fichiers objets correspondants
+OBJ_AES = $(SRC_AES:.c=.o)
+OBJ_MAIN = $(SRC_MAIN:.c=.o)
+OBJ_TEST = $(SRC_TEST:.c=.o)
 
-# Nom de l'exécutable de test
-TEST_EXEC = $(TEST_DIR)/test_aes
+all: $(TARGET) $(TEST_TARGET)
 
-# Règle par défaut
-all: test
+# Règle pour compiler le programme principal
+$(TARGET): $(OBJ_AES) $(OBJ_MAIN)
+	$(CC) $(CFLAGS) -o $@ $^
 
-# Compilation de l'exécutable de test
-test: $(OBJ) $(TEST_OBJ)
-	$(CC) $(CFLAGS) -o $(TEST_EXEC) $(OBJ) $(TEST_OBJ)
+# Règle pour compiler les tests
+$(TEST_TARGET): $(OBJ_AES) $(OBJ_TEST)
+	$(CC) $(CFLAGS) -o $@ $^
 
-# Règle générique pour compiler les .c en .o
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Nettoyage des fichiers compilés
 clean:
-	rm -f $(SRC_DIR)/*.o $(TEST_DIR)/*.o $(TEST_EXEC)
-
-.PHONY: all test clean
+	rm -f src/*.o tests/*.o $(TARGET) $(TEST_TARGET)

@@ -11,9 +11,9 @@
 - [x] Assembler ces fonctions pour déchiffrer **un seul bloc**.
 
 ## Phase 3 : Chiffrement de document (Mode ECB)
-- [ ] Créer une fonction pour lire un fichier blocs par blocs de 16 octets.
-- [ ] Implémenter le mode ECB pour chiffrer un document entier avec un clé 128 bits.
-- [ ] Gérer le "padding" (le remplissage du dernier bloc s'il fait moins de 16 octets).
+- [x] Créer une fonction pour lire un fichier blocs par blocs de 16 octets.
+- [x] Implémenter le mode ECB pour chiffrer un document entier avec un clé 128 bits.
+- [x] Gérer le "padding" (le remplissage du dernier bloc s'il fait moins de 16 octets).
 
 ## Phase 4 : Tests et performances
 - [ ] Écrire un script de test ou un programme dédié.
