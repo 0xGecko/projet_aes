@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g -Iinclude
+CFLAGS = -Wall -Wextra -O3 -Iinclude
 
 # L'exécutable principal (pour le projet)
 TARGET = aes

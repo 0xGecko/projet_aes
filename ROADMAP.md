@@ -16,14 +16,14 @@
 - [x] Gérer le "padding" (le remplissage du dernier bloc s'il fait moins de 16 octets).
 
 ## Phase 4 : Tests et performances
-- [ ] Écrire un script de test ou un programme dédié.
-- [ ] Mesurer le temps de calcul pour chiffrer 100x le fichier 'alice.sage' en mode ECB avec la clé par défaut.
+- [x] Écrire un script de test ou un programme dédié.
+- [x] Mesurer le temps de calcul pour chiffrer 100x le fichier 'alice.sage' en mode ECB avec la clé par défaut.
 
 ## Phase 5 : Documentation et compte-rendu
-- [ ] Commenter le code de façon claire.
+- [x] Commenter le code de façon claire.
 - [ ] Rédiger la notice d'utilisation.
-- [ ] Décrire le fonctionnement de l'implémentation.
-- [ ] Détailler les difficultés rencontrées et les solutions trouvées.
+- [x] Décrire le fonctionnement de l'implémentation.
+- [x] Détailler les difficultés rencontrées et les solutions trouvées.
 
 ## Phase 6 : Extensions (bonus si j'ai le temps)
 - [ ] Ajouter les mode CBC, CFB (ou OFB) et GCM.
