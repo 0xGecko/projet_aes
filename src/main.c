@@ -5,12 +5,6 @@
 #include <getopt.h>
 #include "../include/aes.h"
 
-// Clé par défaut démandé par la ROADMAP (0x00 à 0x0f
-static const uint8_t DEFAULT_KEY[16] = {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
-};
-
 // Fonction permettant l'affichage de l'aide
 static void print_usage(FILE *out) {
     fprintf(out, 
@@ -20,12 +14,12 @@ static void print_usage(FILE *out) {
         "   -e, --encrypt   Chiffrer le fichier (Default)\n"
         "   -d, --decrypt   Déchiffrer le fichier\n"
         "   -h, --help      Affichage de l'aide\n"
-        "   (La clé est fixé par défaut pour le moment)\n"
+        "   -k, --key,      Spécifier une clé en héxadécimal (32 caractères).\n"
     );
 }
 
 // Fonction pour traiter le fichier (Chiffrement ECB avec Padding PKCS#7)
-static void process_file(FILE *in_file, FILE *out_file, bool encrypting) {
+static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const uint8_t *key) {
     uint8_t buffer[16];
     uint8_t output[16];
     size_t bytes_read;
@@ -37,7 +31,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting) {
             last_bytes_read = bytes_read; // On mémorise la taille lue
             if (bytes_read == 16) {
                 // Bloc complet de 16 octets
-                aes_cipher(buffer, DEFAULT_KEY, output);
+                aes_cipher(buffer, key, output);
                 fwrite(output, 1, 16, out_file);
             } else {
                 // Bloc incomplet : On va appliquer du Padding PKCS#7
@@ -45,7 +39,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting) {
                 for (size_t i = bytes_read; i < 16; i++) {
                     buffer[i] = padding_value;
                 }
-                aes_cipher(buffer, DEFAULT_KEY, output);
+                aes_cipher(buffer, key, output);
                 fwrite(output, 1, 16, out_file);
             }
         }
@@ -56,7 +50,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting) {
             for (int i = 0; i < 16; i ++) {
                 buffer[i] = 16;
             }
-            aes_cipher(buffer, DEFAULT_KEY, output);
+            aes_cipher(buffer, key, output);
             fwrite(output, 1, 16, out_file);
         }
     } else {
@@ -68,7 +62,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting) {
 
         while (bytes_read == 16) {
             // On déchiffre le bloc courant
-            aes_decipher(buffer, DEFAULT_KEY, output);
+            aes_decipher(buffer, key, output);
 
             // On essaie de lire le bloc SUIVANT
             bytes_read = fread(next_buffer, 1, 16, in_file);
@@ -97,18 +91,31 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting) {
     }
 }
 
+void hex_to_bytes(const char* hex, uint8_t* bytes) {
+    for (int i = 0; i < 16; i++) {
+        sscanf(hex + 2 * i, "%02hhx", &bytes[i]);
+    }
+}
+
 int main(int argc, char *argv[]) {
     bool encrypting = true; // Par défaut, on chiffre
 
+    // Clé par défaut
+    uint8_t current_key[16] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    };
+
     static struct option long_opts[] = {
-        {"encrypt", no_argument, 0, 'e'},
-        {"decrypt", no_argument, 0, 'd'},
-        {"help",    no_argument, 0, 'h'},
+        {"encrypt", no_argument,        0, 'e'},
+        {"decrypt", no_argument,        0, 'd'},
+        {"help",    no_argument,        0, 'h'},
+        {"key",     required_argument,  0, 'k'},
         {0,0,0,0}
     };
 
     int opt, idx;
-    while ((opt = getopt_long(argc, argv, "edh", long_opts, &idx)) != -1) {
+    while ((opt = getopt_long(argc, argv, "edhk:", long_opts, &idx)) != -1) {
         switch (opt) {
             case 'e': 
                 encrypting = true; 
@@ -121,7 +128,15 @@ int main(int argc, char *argv[]) {
             case 'h':
                 print_usage(stdout);
                 return EXIT_SUCCESS;
-            
+
+            case 'k':
+                if (strlen(optarg) != 32) {
+                    fprintf(stderr, "Erreur : La clé doit faire exactement 32 caractères hexadécimaux.\n");
+                    return EXIT_FAILURE;
+                }
+                hex_to_bytes(optarg, current_key);
+                break;
+
             default:
                 print_usage(stderr);
                 return EXIT_FAILURE;
@@ -151,7 +166,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Traitement du fichier
-    process_file(in_file, out_file, encrypting);
+    process_file(in_file, out_file, encrypting, current_key);
 
     printf("Opération terminé avec succès.\n");
 
