@@ -42,25 +42,27 @@ static const uint8_t inv_sbox[256] = {
     0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d
 };
 
-/* Tableau des constantes de tour (Rcon) pour l'AES-128
+/* Tableau des constantes étendu pour supporter les 14 tours de l'AES-256 
 On place 0x00 à l'indice 0 pour que rcon[1] corresponde bien au Round 1.
 -----------
 Remarque : 
 Rcon est censé être un mot de 4 octets de type [x, 0, 0, 0], mais vu que seuls
 les premiers octets changent, on ne stocke que ce premier octet en C (petite économie de place)
 */
-static const uint8_t rcon[11] = {
-    0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36
+static const uint8_t rcon[15] = {
+    0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d
 };
 
 /*
 Fonction : init_state
 ---------------------
-Copie un bloc de 16 octets (128 bits dans la matrice carré d'État (State).
-La copie se fait colonne par colonne, conformément au standard FIPS-197.
+Initialise la matrice d'état (State) à partir du bloc de texte en clair (ou chiffré).
+Conformément à la norme FIPS-197, le tableau d'entrée de 16 octets est copié
+dans une matrice 4x4 en remplissant d'abord les colonnes (Column-major order).
 
-    in    : Le tableau d'entrée d'une dimension (16 octets).
-    state : La matrice d'état de 4 lignes et colonnes qui sera modifiée.
+Paramètres :
+  - in    : Pointeur vers le tableau d'entrée (16 octets).
+  - state : Matrice d'état 4x4 à initialiser.
 */
 void init_state(const uint8_t in[16], state_t state) {
     // On parcout chaque colonne
@@ -76,7 +78,9 @@ void init_state(const uint8_t in[16], state_t state) {
 /*
 Fonction : print_state
 ----------------------
-Affiche la matrice d'état sous forme de grille 4x4 en hexadécimal.
+Fonction utilitaire de débogage.
+Affiche la matrice d'état courante dans la console sous la forme d'une 
+grille 4x4 en valeurs hexadécimales.
 */
 void print_state(const state_t state) {
     for (int r = 0; r < 4; r++) {
@@ -92,7 +96,10 @@ void print_state(const state_t state) {
 /*
 Fonction : sub_bytes
 --------------------
-Applique la subtitution non-linéaire (S-box) à chaque octet de l'État.
+Transformation non-linéaire.
+Applique une substitution octet par octet sur la matrice d'état en utilisant 
+une table de substitution (S-box). La S-box est construite par l'inverse 
+multiplicatif dans le corps de Galois GF(2^8) suivi d'une transformation affine.
 */
 void sub_bytes(state_t state) {
     // On parcourt chaque colonne
@@ -108,11 +115,13 @@ void sub_bytes(state_t state) {
 /*
 Fonction : shift_rows
 ---------------------
-Effectue un décalage cyclique vers la gauche des lignes de l'État.
-Ligne 0 : pas de décalage
-Ligne 1 : décalage de 1
-Ligne 2 : décalage de 2
-Ligne 3 : décalage de 3
+Transformation linéaire de diffusion
+Effectue un décalage circulaire des lignes de la matrice d'état vers la gauche.
+L'objectif est de mélanger les octets de différentes colonnes.
+ - Ligne 0 : Inchangée.
+ - Ligne 1 : Décalage de 1 octet vers la gauche.
+ - Ligne 2 : Décalage de 2 octets vers la gauche.
+ - Ligne 3 : Décalage de 3 octets vers la gauche.
 */
 void shift_rows(state_t state) {
     uint8_t temp;
@@ -143,7 +152,16 @@ void shift_rows(state_t state) {
 /*
 Fonction utilitaire : xtime
 ---------------------------
-Multiplie un octet par 2 dans le corps de Galois GF(2^8).
+Opération fondamentale dans le corps fini de Galois GF(2^8).
+Effectue la multiplication d'un polynôme par x (soit la valeur hexadécimale 0x02) 
+modulo le polynôme irréductible P(x) = x^8 + x^4 + x^3 + x + 1 (0x11B).
+Matériellement, cela se traduit par un décalage de bit vers la gauche, suivi
+d'un XOR avec 0x1B en cas de dépassement de capacité (débordement du MSB).
+
+Paramètre :
+  - x : L'octet à multiplier par 0x02.
+Retourne :
+  - Le résultat de la multiplication dans GF(2^8).
 */
 static uint8_t xtime(uint8_t x) {
     // Si le bit de poids fort est 1, on décale et on XOR avec 01xb
@@ -153,7 +171,11 @@ static uint8_t xtime(uint8_t x) {
 
 /*
 Fonction  : mix_columns
-Mélange les données de chaque colonne de l'État de manière indépendante.
+Transformation de diffusion sur les colonnes.
+Traite chaque colonne de l'état comme un polynôme du troisième degré à 
+coefficients dans GF(2^8). Chaque colonne est multipliée modulo x^4 + 1 
+par un polynôme fixe c(x) = {03}x^3 + {01}x^2 + {01}x + {02}.
+Cette étape garantit une forte diffusion au sein de l'algorithme.
 */
 void mix_columns(state_t state) {
     uint8_t col[4];
@@ -183,7 +205,9 @@ void mix_columns(state_t state) {
 /*
 Fonction : add_round_key
 ------------------------
-Applique la clé à chaque octet de l'État.
+Intégration de la clé secrète.
+Effectue un XOR bit à bit entre la matrice d'état courante et la clé de tour 
+calculée par l'expansion de clé.
 */
 void add_round_key(state_t state, const uint8_t round_key[4][NB]) {
     // On parcourt chaque colonne 
@@ -197,50 +221,72 @@ void add_round_key(state_t state, const uint8_t round_key[4][NB]) {
 }
 
 /*
-Fonction : key_expansion
-------------------------
-Étend la clé initiale de 16 octets en 44 mots (words) de 4 octets (pour 11 clés de rounds).
-*/
-void key_expansion(const uint8_t key[16], uint8_t w[44][4]) {
-        uint8_t temp[4];
+Fonction : key_expansion (MAJ)
+------------------------------
+Génération de la clé étendue.
+Prend la clé maître (128, 192 ou 256 bits) et l'étend en un tableau de mots 
+de 32 bits pour fournir une clé unique à chaque tour.
+La fonction gère dynamiquement Nk et génère Nr + 1 clés de tour. 
 
-        // 1. Les 4 premiers mots (i < Nk = 4) sont simplement la clé d'origine
-        for (int i = 0; i < 4; i++) {
+Remarque (AES-256) : Si la clé initiale fait 256 bits (Nk = 8), une étape 
+de substitution (SubWord) supplémentaire est appliquée à la moitié du bloc 
+pour garantir une entropie suffisante.
+
+Paramètres :
+  - key      : Pointeur vers la clé maître.
+  - w        : Tableau de destination pour la clé étendue.
+  - key_size : Enumération définissant la taille de la clé (16, 24 ou 32 octets).
+*/
+void key_expansion(const uint8_t *key, uint8_t w[MAX_EXPANDED_KEY_WORDS][4], AES_KEY_SIZE key_size) {
+        uint8_t temp[4];
+        int NK = key_size / 4;          // Nombre de mots de la clé (4, 6 ou 8)
+        int NR = NK + 6;                // Nombre de tours (10, 12 ou 14)
+        int total_words = 4 * (NR + 1); // Taille totale de la clé étendue (44, 52 ou 60)
+
+        // 1. Les NK premiers mots sont la clé d'origine
+        for (int i = 0; i < NK; i++) {
             w[i][0] = key[4 * i];
             w[i][1] = key[4 * i + 1];
             w[i][2] = key[4 * i + 2];
             w[i][3] = key[4 * i + 3];
         }
 
-        // 2. Calcul des 40 mots suivants (i de 4 à 43)
-        for (int i = 4; i < 44; i++) {
+        // 2. Calcul des mots suivants
+        for (int i = NK; i < total_words; i++) {
             // On copie le mot précédent dans temp
             temp[0] = w[i - 1][0];
             temp[1] = w[i - 1][1];
             temp[2] = w[i - 1][2];
             temp[3] = w[i - 1][3];
             
-            // Tous les 4 mots (i.e. début d'un nouveau round), on applique la transformation spéciale 
-            // dans le pseudo-code de la Fig 11.
-            if (i % 4 == 0) {
-                // a) Rotword : décalage cycle d'un octet vers la gauche
+            // Tous les NK mots, on applique RotWord, SubWord et Rcon
+            if (i % NK == 0) {
+                // Rotword : décalage cycle d'un octet vers la gauche
                 uint8_t t = temp[0];
                 temp[0] = temp[1];
                 temp[1] = temp[2];
                 temp[2] = temp[3];
                 temp[3] = t;
 
-                // b) Subword : on passe chaque octet dans la S-box
+                // Subword : on passe chaque octet dans la S-box
                 temp[0] = sbox[temp[0]];
                 temp[1] = sbox[temp[1]];
                 temp[2] = sbox[temp[2]];
                 temp[3] = sbox[temp[3]];
 
-                // c) XOR avec la constante de Round (Rcon) sur le premier octet
-                temp[0] ^= rcon[i / 4];
+                // XOR avec la constante de Round (Rcon) sur le premier octet
+                temp[0] ^= rcon[i / NK];
+            } 
+
+            // RÈGLE SPÉCIALE AES-256 : Subword supplémentaire si la clé fait 256 bits (NK > 6)
+            else if (NK > 6 && i % NK == 4) {
+                temp[0] = sbox[temp[0]];
+                temp[1] = sbox[temp[1]];
+                temp[2] = sbox[temp[2]];
+                temp[3] = sbox[temp[3]];
             }
 
-            // 3. On génère le nouveau mot en faisant un XOR avec le mot de 4 crans en arrière
+            // 3. XOR avec le mot NK crans en arrière
             w[i][0] = w[i - 4][0] ^ temp[0];
             w[i][1] = w[i - 4][1] ^ temp[1];
             w[i][2] = w[i - 4][2] ^ temp[2];
@@ -249,17 +295,27 @@ void key_expansion(const uint8_t key[16], uint8_t w[44][4]) {
 }
 
 /*
-Fonction : aes_cipher
----------------------
-Chiffre un bloc de 16 octets avec une clé de 16 octets.
+Fonction : aes_cipher (MAJ)
+---------------------------
+Moteur principal de chiffrement AES.
+Orchestre les opérations cryptographiques pour chiffrer un bloc de 16 octets.
+Le nombre de tours (NR) s'adapte dynamiquement (10, 12 ou 14) en fonction 
+de la taille de la clé fournie.
+
+Paramètres :
+  - in       : Bloc de texte en clair (16 octets).
+  - key      : Clé de chiffrement maître.
+  - out      : Bloc de texte chiffré généré (16 octets).
+  - key_size : Taille de la clé maître.
 */
-void aes_cipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]) {
+void aes_cipher(const uint8_t in[16], const uint8_t *key, uint8_t out[16], AES_KEY_SIZE key_size) {
     state_t state;
-    uint8_t w[44][4];
-    uint8_t current_key[4][NB]; // Cela nous permettra de formater la clé pour add_round_key
+    uint8_t w[MAX_EXPANDED_KEY_WORDS][4];
+    uint8_t current_key[4][NB];             // Cela nous permettra de formater la clé pour add_round_key
+    int NR = (key_size) / 4 + 6;            // Nombre de round
 
     // 1. Expansion de la clé
-    key_expansion(key, w);
+    key_expansion(key, w, key_size);
 
     // 2. Initialisation de l'État avec le texte clair
     init_state(in, state);
@@ -273,7 +329,7 @@ void aes_cipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]) {
     }
     add_round_key(state, current_key);
     
-    // --- ROUND 1 à 9 ---
+    // --- ROUND 1 à NR-1 ---
     for (int round = 1; round < NR; round++) {
         sub_bytes(state);
         shift_rows(state);
@@ -288,7 +344,7 @@ void aes_cipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]) {
         add_round_key(state, current_key);
     }
 
-    // --- ROUND 10 ---
+    // --- ROUND FINAL (NR) ---
     sub_bytes(state);
     shift_rows(state);
 
@@ -311,7 +367,8 @@ void aes_cipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]) {
 /*
 Fonction : inv_sub_bytes
 ------------------------
-Applique la subtitution non-linéaire inverse (S-box inverse) à chaque octet de l'État.
+Opération inverse de SubBytes.
+Utilise la S-box inverse pour restituer les octets lors du déchiffrement.
 */
 void inv_sub_bytes(state_t state) {
     // On parcourt chaque colonne 
@@ -327,11 +384,8 @@ void inv_sub_bytes(state_t state) {
 /*
 Fonction : inv_shift_rows
 -------------------------
-Effectue un décalage cyclique vers la droite des lignes de l'État.
-Ligne 0 : pas de décalage
-Ligne 1 : décalage de 1
-Ligne 2 : décalage de 2
-Ligne 3 : décalage de 3
+Opération inverse de ShiftRows.
+Effectue un décalage circulaire des lignes de la matrice d'état vers la droite.
 */
 void inv_shift_rows(state_t state) {
     uint8_t temp;
@@ -362,7 +416,15 @@ void inv_shift_rows(state_t state) {
 /*
 Fonction utilitaire : multiply
 ---------------------------
-Multiplie 2 octets (x et y) dans le corps de Galois GF(2^8).
+Multiplication générique de deux éléments dans GF(2^8).
+Utilise l'algorithme de multiplication dite Shift-and-add 
+adapté pour les corps finis. La fonction s'appuie sur la primitive xtime() 
+pour multiplier par 2 à chaque itération.
+
+Paramètres :
+  - x, y : Les deux octets (polynômes) à multiplier.
+Retourne :
+  - Le produit x * y dans GF(2^8).
 */
 static uint8_t multiply(uint8_t x, uint8_t y) {
     uint8_t result = 0;
@@ -388,7 +450,9 @@ static uint8_t multiply(uint8_t x, uint8_t y) {
 /*
 Fonction : inv_mix_columns
 --------------------------
-Mélange les données de chaque colonne de l'État en utilisant la matrice inverse.
+Opération inverse de MixColumns.
+Multiplie chaque colonne par le polynôme inverse 
+d(x) = {0b}x^3 + {0d}x^2 + {09}x + {0e} modulo x^4 + 1.
 */
 void inv_mix_columns(state_t state) {
     uint8_t col[4];
@@ -411,21 +475,30 @@ void inv_mix_columns(state_t state) {
 /*
 Fonction : aes_decipher
 -----------------------
-Déchiffre un bloc de 16 octets (texte chiffré) avec une clé de 16 octets
+Moteur principal de déchiffrement AES.
+Applique les opérations inverses dans l'ordre mathématique approprié pour 
+retrouver le bloc de texte clair original à partir d'un bloc chiffré.
+
+Paramètres :
+  - in       : Bloc de texte chiffré (16 octets).
+  - key      : Clé de chiffrement maître.
+  - out      : Bloc de texte clair restitué (16 octets).
+  - key_size : Taille de la clé maître.
 */
-void aes_decipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]) {
+void aes_decipher(const uint8_t in[16], const uint8_t *key, uint8_t out[16], AES_KEY_SIZE key_size) {
     state_t state;
-    uint8_t w[44][4];
-    uint8_t current_key[4][NB]; // Cela nous permettra de formater la clé pour add_round_key
+    uint8_t w[MAX_EXPANDED_KEY_WORDS][4];
+    uint8_t current_key[4][NB];
+    int NR = (key_size / 4) + 6;
 
     // 1. Expansion de la clé
-    key_expansion(key, w);
+    key_expansion(key, w, key_size);
 
     // 2. Initialisation de l'État avec le texte chiffré
     init_state(in, state);
 
-    // --- ROUND 10 ---
-    // On extrait la clé du Round 10 (les 4 derniers mots de w)
+    // --- ROUND FINAL (NR) ---
+    // On extrait la clé du Round NR (les 4 derniers mots de w)
     for (int c = 0; c < NB; c++) {
         for (int r = 0; r < 4; r++) {
             current_key[r][c] = w[NR * 4 + c][r];
@@ -433,7 +506,7 @@ void aes_decipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]) 
     }
     add_round_key(state, current_key);
     
-    // --- ROUND 9 à 1 ---
+    // --- ROUND NR-1 à 1 ---
     for (int round = NR - 1; round >= 1; round--) {
         inv_shift_rows(state);
         inv_sub_bytes(state);

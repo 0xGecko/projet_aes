@@ -102,10 +102,10 @@ int main() {
     };
 
     // Notre tableau pour stocker les 44 mots
-    uint8_t w[44][4];
+    uint8_t w[MAX_EXPANDED_KEY_WORDS][4];
 
     // On lance l'expansion
-    key_expansion(cipher_key, w);
+    key_expansion(cipher_key, w, AES_128);
 
     // On check la toute dernière clé (Round 10), qui correspond aux 4 derniers mots (w[40] à w[43])
     printf("Cle du Round 10 :\n");
@@ -125,7 +125,7 @@ int main() {
 
     uint8_t out[16];
 
-    aes_cipher(input, cipher_key, out);
+    aes_cipher(input, cipher_key, out, AES_128);
 
     printf("Ciphertext :\n");
     for (int c = 0; c < 4; c++) {
@@ -208,7 +208,7 @@ int main() {
 
     uint8_t decrypted[16];
 
-    aes_decipher(out, cipher_key, decrypted);
+    aes_decipher(out, cipher_key, decrypted, AES_128);
 
     printf("Text déchiffré :\n");
     for (int c = 0; c < 4; c++) {

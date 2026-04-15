@@ -3,10 +3,19 @@
 
 #include <stdint.h>
 
-// Définitions des paramètres pour l'AES-128
+// Le nombre de colonnes de l'État (State) est toujours de 4 pour l'AES
 #define NB 4
-#define NK 4
-#define NR 10
+
+// Définitions des tailles de clés possibles en octets
+typedef enum {
+    AES_128 = 16, // 16 octets = 128 bits (Nk=4, Nr=10)
+    AES_192 = 24, // 24 octets = 192 bits (Nk=6, Nr=12)
+    AES_256 = 32, // 32 octets = 256 bits (Nk=8, Nr=14)
+} AES_KEY_SIZE;
+
+// Le tableau des clés étendues (RoundKey) doit pouvoir contenir la plus grande taille possible.
+// Remarque pour AES-256 : (14 tours + 1) * 4 mots de 32 bits = 60 mots.
+#define MAX_EXPANDED_KEY_WORDS 60
 
 // Définition de notre type pour l'État (State)
 // Un tableau 2D de 4 lignes et 4 colonnes d'octets
@@ -30,11 +39,11 @@ void add_round_key(state_t state, const uint8_t round_key[4][NB]);
 // Prototype du mélange des colonnes
 void mix_columns(state_t state);
 
-// Prototype de l'expansion de la clé
-void key_expansion(const uint8_t key[16], uint8_t w[44][4]);
+// NOUVEAU PROTOTYPE : On passe la taille de la clé et on augmente la taille de 'w'
+void key_expansion(const uint8_t *key, uint8_t w[MAX_EXPANDED_KEY_WORDS][4], AES_KEY_SIZE key_size);
 
-// Fonction principale de chiffrement (AES-128)
-void aes_cipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]);
+// NOUVEAU PROTOTYPE : 'key' devient un pointeur pour accepter 16, 24 ou 32 octets
+void aes_cipher(const uint8_t in[16], const uint8_t *key, uint8_t out[16], AES_KEY_SIZE key_size);
 
 // Prototype de la fonction inverse de substitution des octets (avec S-box inverse)
 void inv_sub_bytes(state_t state);
@@ -45,8 +54,8 @@ void inv_shift_rows(state_t state);
 // Prototype inverse du mélange des colonnes
 void inv_mix_columns(state_t state);
 
-// Fonction principale de déchiffrement (AES-128)
-void aes_decipher(const uint8_t in[16], const uint8_t key[16], uint8_t out[16]);
+// NOUVEAU PROTOTYPE : 'key' devient un pointeur
+void aes_decipher(const uint8_t in[16], const uint8_t *key, uint8_t out[16], AES_KEY_SIZE key_size);
 
 
 #endif /* AES_H */

@@ -28,9 +28,9 @@
 ## Phase 6 : Extensions (Les défis finaux)
 
 **Objectif A : Flexibilité des tailles de clés (AES-192 et AES-256)**
-- [ ] Refactoriser le cœur (`aes.c` / `aes.h`) pour gérer dynamiquement le nombre de tours ($N_r = 10, 12$ ou $14$) et la taille de la clé en mots ($N_k = 4, 6$ ou $8$).
-- [ ] Modifier la fonction `KeyExpansion` pour intégrer la condition spéciale de l'AES-256 (ajout d'une étape `SubBytes` supplémentaire au milieu du processus).
-- [ ] Mettre à jour `main.c` pour accepter une nouvelle option (ex: `-s 256` ou `--size 256`) et adapter la longueur de la clé lue en argument.
+- [x] Refactoriser le cœur (`aes.c` / `aes.h`) pour gérer dynamiquement le nombre de tours ($N_r = 10, 12$ ou $14$) et la taille de la clé en mots ($N_k = 4, 6$ ou $8$).
+- [x] Modifier la fonction `KeyExpansion` pour intégrer la condition spéciale de l'AES-256 (ajout d'une étape `SubBytes` supplémentaire au milieu du processus).
+- [x] Mettre à jour `main.c` pour accepter une nouvelle option (ex: `-s 256` ou `--size 256`) et adapter la longueur de la clé lue en argument.
 
 **Objectif B : Modes opératoires classiques (CBC, CFB, OFB)**
 - [ ] Ajouter la gestion d'un Vecteur d'Initialisation (IV) de 16 octets via le terminal (ex: option `-v` ou `--iv`).

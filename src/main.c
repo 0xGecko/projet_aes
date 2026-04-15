@@ -14,12 +14,13 @@ static void print_usage(FILE *out) {
         "   -e, --encrypt   Chiffrer le fichier (Default)\n"
         "   -d, --decrypt   Déchiffrer le fichier\n"
         "   -h, --help      Affichage de l'aide\n"
+        "   -s, --size,     Taille de la clé en bits : 128 (défaut), 192 ou 256\n"
         "   -k, --key,      Spécifier une clé en héxadécimal (32 caractères).\n"
     );
 }
 
 // Fonction pour traiter le fichier (Chiffrement ECB avec Padding PKCS#7)
-static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const uint8_t *key) {
+static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const uint8_t *key, AES_KEY_SIZE key_size) {
     uint8_t buffer[16];
     uint8_t output[16];
     size_t bytes_read;
@@ -31,7 +32,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
             last_bytes_read = bytes_read; // On mémorise la taille lue
             if (bytes_read == 16) {
                 // Bloc complet de 16 octets
-                aes_cipher(buffer, key, output);
+                aes_cipher(buffer, key, output, key_size);
                 fwrite(output, 1, 16, out_file);
             } else {
                 // Bloc incomplet : On va appliquer du Padding PKCS#7
@@ -39,7 +40,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
                 for (size_t i = bytes_read; i < 16; i++) {
                     buffer[i] = padding_value;
                 }
-                aes_cipher(buffer, key, output);
+                aes_cipher(buffer, key, output, key_size);
                 fwrite(output, 1, 16, out_file);
             }
         }
@@ -50,7 +51,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
             for (int i = 0; i < 16; i ++) {
                 buffer[i] = 16;
             }
-            aes_cipher(buffer, key, output);
+            aes_cipher(buffer, key, output, key_size);
             fwrite(output, 1, 16, out_file);
         }
     } else {
@@ -62,7 +63,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
 
         while (bytes_read == 16) {
             // On déchiffre le bloc courant
-            aes_decipher(buffer, key, output);
+            aes_decipher(buffer, key, output, key_size);
 
             // On essaie de lire le bloc SUIVANT
             bytes_read = fread(next_buffer, 1, 16, in_file);
@@ -91,50 +92,60 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
     }
 }
 
-void hex_to_bytes(const char* hex, uint8_t* bytes) {
-    for (int i = 0; i < 16; i++) {
-        sscanf(hex + 2 * i, "%02hhx", &bytes[i]);
+// Fonction sécurisée pour la conversion de la clé
+void hex_to_bytes(const char* hex, uint8_t* bytes, int byte_len) {
+    for (int i = 0; i < byte_len; i++) {
+        unsigned int temp_val;
+        sscanf(hex + 2 * i, "%2x", &temp_val);
+        bytes[i] = (uint8_t)temp_val;
     }
 }
 
 int main(int argc, char *argv[]) {
-    bool encrypting = true; // Par défaut, on chiffre
+    bool encrypting = true;                     // Par défaut, on chiffre
+    AES_KEY_SIZE current_key_size = AES_128;    // 128 bits par défaut
+    char *key_hex_str = NULL;                   // Pour stocker la clé tapée en argument
 
-    // Clé par défaut
-    uint8_t current_key[16] = {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    // Clé par défaut allouée sur 32 octets au cas où on force le 256 bits
+    uint8_t current_key[32] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Padding par défaut
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
 
     static struct option long_opts[] = {
         {"encrypt", no_argument,        0, 'e'},
         {"decrypt", no_argument,        0, 'd'},
         {"help",    no_argument,        0, 'h'},
+        {"size",    required_argument,  0, 's'},
         {"key",     required_argument,  0, 'k'},
         {0,0,0,0}
     };
 
     int opt, idx;
-    while ((opt = getopt_long(argc, argv, "edhk:", long_opts, &idx)) != -1) {
+    while ((opt = getopt_long(argc, argv, "edhk:s:", long_opts, &idx)) != -1) {
         switch (opt) {
-            case 'e': 
-                encrypting = true; 
-                break; 
-
-            case 'd':
-                encrypting = false;
-                break;
-
-            case 'h':
-                print_usage(stdout);
-                return EXIT_SUCCESS;
-
-            case 'k':
-                if (strlen(optarg) != 32) {
-                    fprintf(stderr, "Erreur : La clé doit faire exactement 32 caractères hexadécimaux.\n");
+            case 'e': encrypting = true; break; 
+            case 'd': encrypting = false; break;
+            case 'h': print_usage(stdout); return EXIT_SUCCESS;
+            
+            case 's': {
+                int size_val = atoi(optarg);
+                if (size_val == 128) {
+                    current_key_size = AES_128;
+                } else if (size_val == 192) {
+                    current_key_size = AES_192;
+                } else if (size_val == 256) {
+                    current_key_size = AES_256;
+                } else {
+                    fprintf(stderr, "Erreur : La taille de la clé doit être 128, 192 ou 256.\n");
                     return EXIT_FAILURE;
                 }
-                hex_to_bytes(optarg, current_key);
+                break;
+            }
+            case 'k':
+                key_hex_str = optarg; // On sauvegarde la chaîne pour plus tard
                 break;
 
             default:
@@ -143,6 +154,17 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Validation de la longueur de la clé APRÈS avoir défini la taille
+    if (key_hex_str != NULL) {
+        int expected_hex_len = current_key_size * 2;
+        if (strlen(key_hex_str) != (size_t)expected_hex_len) {
+            fprintf(stderr, "Erreur : Pour une clé AES-%d, la clé doit faire exactement %d caractères hexadécimaux.\n", current_key_size * 8, expected_hex_len);
+            return EXIT_FAILURE;
+        }
+        // Conversion sécurisée
+        hex_to_bytes(key_hex_str, current_key, current_key_size);
+    }
+    
     // Il nous faut exactement 2 arguments restants (fichier in et out)
     if (optind + 2 != argc) {
         fprintf(stderr, "Erreur : Fichier d'entrée ou de sortie manquants.\n");
@@ -166,9 +188,9 @@ int main(int argc, char *argv[]) {
     }
 
     // Traitement du fichier
-    process_file(in_file, out_file, encrypting, current_key);
+    process_file(in_file, out_file, encrypting, current_key, current_key_size);
 
-    printf("Opération terminé avec succès.\n");
+    printf("Opération terminée avec succès (Mode: AES-%d ECB).\n", current_key_size * 8);
 
     fclose(in_file);
     fclose(out_file);
