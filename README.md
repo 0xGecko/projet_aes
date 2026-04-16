@@ -9,11 +9,11 @@ Il a été réalise dans le cadre du module "Crypto compléments" du M1 Mathéma
 - [x] Chiffrement d'un bloc de 128 bits avec une clé de 128 bits.
 - [x] Déchiffrement d'un bloc de 128 bits.
 - [x] Chiffrement et déchiffrement d'un fichier complet en mode ECB.
-- [ ] Utilisation d'une clé par défaut (`0x000102030405060708090a0b0c0d0e0f`) ou d'une clé choisie par l'utilisateur.
+- [x] Utilisation d'une clé par défaut (`0x000102030405060708090a0b0c0d0e0f`) ou d'une clé choisie par l'utilisateur.
 - [x] Script de test mesurant le temps de calcul pour 100 chiffrements du fichier `alice.sage`.
 
 ## 🚀 Fonctionnalités bonus (à venir)
-- [ ] Support des clés de 192 et 256 bits.
+- [x] Support des clés de 192 et 256 bits.
 - [ ] Implémentation d'autres modes d'opération (CBC, CFB, OFB, GCM).
 
 ## 🛠️ Compilation

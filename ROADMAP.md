@@ -33,8 +33,8 @@
 - [x] Mettre à jour `main.c` pour accepter une nouvelle option (ex: `-s 256` ou `--size 256`) et adapter la longueur de la clé lue en argument.
 
 **Objectif B : Modes opératoires classiques (CBC, CFB, OFB)**
-- [ ] Ajouter la gestion d'un Vecteur d'Initialisation (IV) de 16 octets via le terminal (ex: option `-v` ou `--iv`).
-- [ ] Implémenter le mode **CBC (Cipher Block Chaining)** : ajouter le XOR entre le texte clair et le bloc chiffré précédent.
+- [x] Ajouter la gestion d'un Vecteur d'Initialisation (IV) de 16 octets via le terminal (ex: option `-v` ou `--iv`).
+- [x] Implémenter le mode **CBC (Cipher Block Chaining)** : ajouter le XOR entre le texte clair et le bloc chiffré précédent.
 - [ ] Implémenter le mode **CFB (Cipher Feedback)** : transformer l'AES en chiffrement par flot (stream cipher).
 - [ ] Implémenter le mode **OFB (Output Feedback)**.
 
