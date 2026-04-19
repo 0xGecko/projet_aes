@@ -8,7 +8,9 @@
 // Définitions des modes d'opérations supportés
 typedef enum {
     MODE_ECB,
-    MODE_CBC
+    MODE_CBC,
+    MODE_CFB,
+    MODE_OFB
 } BLOCK_CIPHER_MODE;
 
 // Fonction permettant l'affichage de l'aide
@@ -22,7 +24,7 @@ static void print_usage(FILE *out) {
         "   -h, --help      Affichage de l'aide\n"
         "   -s, --size,     Taille de la clé en bits : 128 (défaut), 192 ou 256\n"
         "   -k, --key,      Spécifier une clé en héxadécimal (32 caractères).\n"
-        "   -m, --mode,     Mode d'opéraions : ECB (défaut), CBC\n"
+        "   -m, --mode,     Mode d'opéraions : ecb (défaut), cbc, cfb, ofb\n"
         "   -v, --iv,      Vecteur d'initialisation (IV) en hexadécimal (32 caractères) pour CBC\n"
     );
 }
@@ -115,6 +117,62 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
 
                 fwrite(output, 1, 16, out_file);
             }
+        } else if (mode == MODE_CFB) {
+            // --- CHIFFREMENT CFB ---
+            while ((bytes_read = fread(buffer, 1, 16, in_file)) > 0) {
+                last_bytes_read = bytes_read; // On mémorise la taille lue
+                if (bytes_read < 16) {
+                    // Bloc incomplet : On va appliquer du Padding PKCS#7
+                    uint8_t padding_value = 16 - bytes_read;
+                    for (size_t i = bytes_read; i < 16; i++) {
+                        buffer[i] = padding_value;
+                    }
+                }
+                aes_cipher(iv, key, output, key_size);
+                xor_blocks(output, buffer);
+                memcpy(iv, output, 16);
+                fwrite(output, 1, 16, out_file);
+            }
+
+            // Padding d'un bloc entier si multiple de 16
+            if (feof(in_file) && last_bytes_read == 16) {
+                for (int i = 0; i < 16; i ++) {
+                    buffer[i] = 16;
+                }
+                aes_cipher(iv, key, output, key_size);
+                xor_blocks(output, buffer);
+                memcpy(iv, output, 16);
+                fwrite(output, 1, 16, out_file);
+
+                fwrite(output, 1, 16, out_file);
+            }
+        } else if (mode == MODE_OFB) {
+            // --- CHIFFREMENT OFB ---
+            while ((bytes_read = fread(buffer, 1, 16, in_file)) > 0) {
+                last_bytes_read = bytes_read; // On mémorise la taille lue
+                if (bytes_read < 16) {
+                    // Bloc incomplet : On va appliquer du Padding PKCS#7
+                    uint8_t padding_value = 16 - bytes_read;
+                    for (size_t i = bytes_read; i < 16; i++) {
+                        buffer[i] = padding_value;
+                    }
+                }
+                aes_cipher(iv, key, output, key_size);
+                memcpy(iv, output, 16);
+                xor_blocks(output, buffer);
+                fwrite(output, 1, 16, out_file);
+            }
+
+            // Padding d'un bloc entier si multiple de 16
+            if (feof(in_file) && last_bytes_read == 16) {
+                for (int i = 0; i < 16; i ++) {
+                    buffer[i] = 16;
+                }
+                aes_cipher(iv, key, output, key_size);
+                memcpy(iv, output, 16);
+                xor_blocks(output, buffer);
+                fwrite(output, 1, 16, out_file);
+            }
         }
     } else {
         // ==========================================
@@ -177,6 +235,93 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
                 xor_blocks(output, iv);
                 // Le buffer devient l'IV du tour suivant
                 memcpy(iv, temp_iv, 16);
+
+                bytes_read = fread(next_buffer, 1, 16, in_file);
+
+                if (bytes_read == 0) {
+                    // C'est le dernier bloc ! On doit retirer le padding PKCS#7
+                    uint8_t pad_val = output[15];
+
+                    if (pad_val >= 1 && pad_val <= 16) {
+                        // VÉRIFICATION STRICTE DU PADDING
+                        bool valid_padding = true;
+                        for (int i = 16 - pad_val; i < 16; i++) {
+                            if (output[i] != pad_val) {
+                                valid_padding = false;
+                                break;
+                            }
+                        }
+                        if (valid_padding) {
+                            fwrite(output, 1, 16 - pad_val, out_file);
+                        } else {
+                            fprintf(stderr, "\nAvertissement : Padding PKCS#7 invalide détecté.\n");
+                            fwrite(output, 1, 16, out_file);
+                        }
+                    } else {
+                        fprintf(stderr, "\nAvertissement : Padding PKCS#7 invalide détecté.\n");
+                        fwrite(output, 1, 16, out_file);
+                    }
+                } else {
+                    // Ce n'est pas le dernier bloc, on écrit les 16 octets complets
+                    fwrite(output, 1, 16, out_file);
+                    memcpy(buffer, next_buffer, 16);
+                }
+            }
+        } else if (mode == MODE_CFB) {
+            // --- DECHIFFREMENT CFB ---
+            uint8_t temp_iv[16];
+
+            while (bytes_read == 16) {
+
+                // On sauvegarde le bloc chiffré courant
+                memcpy(temp_iv, buffer, 16);
+
+                // On utilise aes_cipher même pour déchiffrer
+                aes_cipher(iv, key, output, key_size);
+
+                // XOR avec le texte chiffré pour retrouver le clair
+                xor_blocks(output, buffer);
+
+                // L'ancien texte chiffré devient le nouvel IV
+                memcpy(iv, temp_iv, 16);
+                bytes_read = fread(next_buffer, 1, 16, in_file);
+
+                if (bytes_read == 0) {
+                    // C'est le dernier bloc ! On doit retirer le padding PKCS#7
+                    uint8_t pad_val = output[15];
+
+                    if (pad_val >= 1 && pad_val <= 16) {
+                        // VÉRIFICATION STRICTE DU PADDING
+                        bool valid_padding = true;
+                        for (int i = 16 - pad_val; i < 16; i++) {
+                            if (output[i] != pad_val) {
+                                valid_padding = false;
+                                break;
+                            }
+                        }
+                        if (valid_padding) {
+                            fwrite(output, 1, 16 - pad_val, out_file);
+                        } else {
+                            fprintf(stderr, "\nAvertissement : Padding PKCS#7 invalide détecté.\n");
+                            fwrite(output, 1, 16, out_file);
+                        }
+                    } else {
+                        fprintf(stderr, "\nAvertissement : Padding PKCS#7 invalide détecté.\n");
+                        fwrite(output, 1, 16, out_file);
+                    }
+                } else {
+                    // Ce n'est pas le dernier bloc, on écrit les 16 octets complets
+                    fwrite(output, 1, 16, out_file);
+                    memcpy(buffer, next_buffer, 16);
+                }
+            }
+        } else if (mode == MODE_OFB) {
+            // --- DECHIFFREMENT OFB ---
+            while (bytes_read == 16) {
+
+                aes_cipher(iv, key, output, key_size);
+                memcpy(iv, output, 16);
+                xor_blocks(output, buffer);
 
                 bytes_read = fread(next_buffer, 1, 16, in_file);
 
@@ -275,8 +420,12 @@ int main(int argc, char *argv[]) {
                     current_mode = MODE_ECB;
                 } else if (strcmp(optarg, "cbc") == 0) {
                     current_mode = MODE_CBC;
+                } else if (strcmp(optarg, "cfb") == 0) {
+                    current_mode = MODE_CFB;
+                } else if (strcmp(optarg, "ofb") == 0) {
+                    current_mode = MODE_OFB;
                 } else {
-                    fprintf(stderr, "Erreur : mode inconnu. Utiliser 'ecb' ou 'cbc'.\n");
+                    fprintf(stderr, "Erreur : mode inconnu. Utiliser 'ecb', 'cbc', 'cfb' ou 'ofb'.\n");
                     return EXIT_FAILURE;
                 }
                 break;
@@ -303,7 +452,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Validation de l'IV 
-    if (current_mode == MODE_CBC) {
+    if (current_mode != MODE_ECB) {
         if (iv_hex_str == NULL) {
             printf("Info : Aucun IV fourni. Utilisation de l'IV par défaut.\n");
         } else {
@@ -340,7 +489,12 @@ int main(int argc, char *argv[]) {
     // Traitement du fichier
     process_file(in_file, out_file, encrypting, current_key, current_key_size, current_mode, current_iv);
 
-    printf("Opération terminée avec succès (AES-%d %s).\n", current_key_size * 8, current_mode == MODE_ECB ? "ECB" : "CBC");
+    const char* mode_str = "ECB";
+    if (current_mode == MODE_CBC) mode_str = "CBC";
+    if (current_mode == MODE_CFB) mode_str = "CFB";
+    if (current_mode == MODE_OFB) mode_str = "OFB";
+
+    printf("Opération terminée avec succès (AES-%d %s).\n", current_key_size * 8, mode_str);
     
     fclose(in_file);
     fclose(out_file);
