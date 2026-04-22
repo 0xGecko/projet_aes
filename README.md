@@ -14,12 +14,12 @@ Il a été réalise dans le cadre du module "Crypto compléments" du M1 Mathéma
 
 ## 🚀 Fonctionnalités bonus (à venir)
 - [x] Support des clés de 192 et 256 bits.
-- [ ] Implémentation d'autres modes d'opération (CBC, CFB, OFB, GCM).
+- [x] Implémentation d'autres modes d'opération (CBC, CFB, OFB, GCM).
 
 ## 🛠️ Compilation
 Le projet utilise un `Makefile` pour faciliter la compilation. Pour compiler le programme, placez-vous à la racine du projet et tapez :
 ```bash
-make
+make clean && make all
 ```
 
 ## 💻 Utilisation
@@ -27,6 +27,20 @@ make
 ```bash
 ./aes [options] fichier_entree fichier_sortie
 ```
+Avec comme options disponibles : 
+    -`e`, --`encrypt` : Chiffrer le fichier (Action par défaut).
+
+    -`d`, --`decrypt` : Déchiffrer le fichier.
+
+    -`s`, --`size`    : Taille de la clé en bits (128 par défaut, 192 ou 256).
+
+    -`m`, --`mode`    : Mode d'opération (`ecb` par défaut, `cbc`, `cfb`, `ofb`, `ctr`, `gcm`).
+
+    -`k`, --`key`     : Spécifier une clé secrète en hexadécimal (ex: 32 caractères pour 128 bits).
+
+    -`v`, --`iv`      : Spécifier un Vecteur d'Initialisation (IV) en hexadécimal (recommandé : 32 caractères).
+
+    -`h`, --`help`    : Afficher le menu d'aide.
 
 ## 👤 Auteur
 - Alexandre ACCIARI

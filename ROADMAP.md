@@ -36,9 +36,9 @@
 - [x] Ajouter la gestion d'un Vecteur d'Initialisation (IV) de 16 octets via le terminal (ex: option `-v` ou `--iv`).
 - [x] Implémenter le mode **CBC (Cipher Block Chaining)** : ajouter le XOR entre le texte clair et le bloc chiffré précédent.
 - [x] Implémenter le mode **CFB (Cipher Feedback)** : transformer l'AES en chiffrement par flot (stream cipher).
-- [ ] Implémenter le mode **OFB (Output Feedback)**.
+- [x] Implémenter le mode **OFB (Output Feedback)**.
 
 **Objectif C : Le "Boss final" - Mode GCM (Galois/Counter Mode)**
-- [ ] Implémenter le mode **CTR (Counter Mode)** qui sert de base au GCM.
-- [ ] Implémenter l'arithmétique dans le grand corps de Galois $GF(2^{128})$ pour créer la fonction d'authentification `GHASH`.
-- [ ] Générer et vérifier le *Tag* d'authentification pour garantir l'intégrité des fichiers chiffrés.
+- [x] Implémenter le mode **CTR (Counter Mode)** qui sert de base au GCM.
+- [x] Implémenter l'arithmétique dans le grand corps de Galois $GF(2^{128})$ pour créer la fonction d'authentification `GHASH`.
+- [x] Générer et vérifier le *Tag* d'authentification pour garantir l'intégrité des fichiers chiffrés.

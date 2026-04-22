@@ -10,7 +10,8 @@ typedef enum {
     MODE_ECB,
     MODE_CBC,
     MODE_CFB,
-    MODE_OFB
+    MODE_OFB,
+    MODE_GCM
 } BLOCK_CIPHER_MODE;
 
 // Fonction permettant l'affichage de l'aide
@@ -24,7 +25,7 @@ static void print_usage(FILE *out) {
         "   -h, --help      Affichage de l'aide\n"
         "   -s, --size,     Taille de la clé en bits : 128 (défaut), 192 ou 256\n"
         "   -k, --key,      Spécifier une clé en héxadécimal (32 caractères).\n"
-        "   -m, --mode,     Mode d'opéraions : ecb (défaut), cbc, cfb, ofb\n"
+        "   -m, --mode,     Mode d'opéraions : ecb (défaut), cbc, cfb, ofb ou gcm\n"
         "   -v, --iv,      Vecteur d'initialisation (IV) en hexadécimal (32 caractères) pour CBC\n"
     );
 }
@@ -38,22 +39,85 @@ void hex_to_bytes(const char* hex, uint8_t* bytes, int byte_len) {
     }
 }
 
-/* Fonction utilitaire : xor_blocks
------------------------------------
-Applique XOR entre deux blocks de 16 octets
-*/
-void xor_blocks(uint8_t *dest, uint8_t *src) {
-    for (int i = 0; i < 16; i++) {
-        dest[i] ^= src[i];
-    }
-}
-
 // Fonction pour traiter le fichier (Chiffrement ECB ou CBC avec Padding PKCS#7)
 static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const uint8_t *key, AES_KEY_SIZE key_size, BLOCK_CIPHER_MODE mode, uint8_t *iv) {
     uint8_t buffer[16];
     uint8_t output[16];
     size_t bytes_read;
     size_t last_bytes_read = 0; 
+
+    // ==========================================
+    //           TRAITEMENT SPÉCIAL GCM
+    // ==========================================
+    if (mode == MODE_GCM) {
+        // On calcule  la taille totale du fichier
+        fseek(in_file, 0, SEEK_END);
+        long file_size = ftell(in_file);
+        fseek(in_file, 0, SEEK_SET);
+
+        if (encrypting) {
+            // --- CHIFFREMENT GCM ---
+            uint8_t *pt = malloc(file_size);
+            uint8_t *ct = malloc(file_size);
+            uint8_t tag[16];
+
+            // On check la lecture sinon on aura des warnings de la part du compilateur
+            if (file_size > 0) {
+                if (fread(pt, 1, file_size, in_file) != (size_t)file_size) {
+                    fprintf(stderr, "Avertissement : Erreur de lecture du fichier source.\n");
+                }
+            }
+
+            // Dans NIST SP 800-38D, il est recommandé 12 octets pour l'IV en GCM.
+            // On prend les 12 premiers octets de notre current_iv
+            gcm_encrypt_ae(key,  key_size, iv, NULL, 0, pt, file_size, ct, tag, 16);
+
+            // On écrit le texte chiffré, puis on colle notre tag de 16 octets à la fin
+            if (file_size > 0) {
+                fwrite(ct, 1, file_size, out_file);
+            }
+            fwrite(tag, 1, 16, out_file);
+
+            free(pt);
+            free(ct);
+        } else {
+            // --- DECHIFFREMENT GCM ---
+            if (file_size < 16) {
+                fprintf(stderr, "Erreur : Le fichier est trop petit pour contenir un Tag GCM.\n");
+                return;
+            }
+
+            // La taille du texte chiffré est la taille du fichier moins les 16 octets du tag
+            long ct_len = file_size - 16;
+            uint8_t *ct = malloc(ct_len);
+            uint8_t *pt = malloc(ct_len);
+            uint8_t expected_tag[16];
+
+            // On check la lecture sinon on aura des warnings de la part du compilateur
+            if (ct_len > 0) {
+                if (fread(ct, 1, ct_len, in_file) != (size_t)ct_len) {
+                    fprintf(stderr, "Avertissement : Erreur de lecture du texte chiffré.\n");
+                }
+            }
+            if (fread(expected_tag, 1, 16, in_file) != 16) {
+                fprintf(stderr, "Avertissement : Erreur de lecture du Tag.\n");
+            }
+            
+            bool is_valid = gcm_decrypt_ad(key, key_size, iv, NULL, 0, ct, ct_len, expected_tag, 16, pt);
+
+            if (is_valid) {
+                printf("\n[SUCCESS!!] Tag d'athentification valide. Fichier intègre !\n");
+                fwrite(pt, 1, ct_len, out_file);
+            } else {
+                fprintf(stderr, "\n[CRITICAL ERROR!!] Tag d'authenfication INVALIDE !\n");
+                fprintf(stderr, "Le fichier a été modifié, corrompu ou piraté. Déchiffrement annulé.\n");
+                // Remarque : On n'écrit pas le fichier de sortie pour des raisons de sécurité
+            }
+            free(ct);
+            free(pt);
+        }
+        return;
+    }
 
     if (encrypting) {
         // ==========================================
@@ -358,7 +422,115 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
     }
 }
 
+// Fonction utilitaire pour afficher un bloc de 16 octets
+void print_block(const char* label, const uint8_t block[16]) {
+    printf("%s : ", label);
+    for (int i = 0; i < 16; i++) {
+        printf("%02x ", block[i]);
+    }
+    printf("\n");
+}
+
+void test_gcm_math() {
+    printf("\n=== DEBUT DES TESTS GCM ===\n");
+    // ---------------------------------------------------------
+    // TEST 1 : increment_compteur
+    // ---------------------------------------------------------
+    printf("\n--- Test 1 : Increment Compteur ---\n");
+    uint8_t counter[16] = {
+        0xAA, 0xBB, 0xCC, 0xDD, 0x00, 0x00, 0x00, 0x00,  // 96 bits de gauche (intouchables)
+        0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFE   // 32 bits de droite
+    };
+    print_block("Avant      ", counter);
+    increment_compteur(counter);
+    print_block("Après (+1) ", counter);
+    increment_compteur(counter);
+    print_block("Après (+2) ", counter); 
+    // Le résultat attendu doit finir par ... 00 00 00 00 (la retenue work)
+
+    // ---------------------------------------------------------
+    // TEST 2 : gcm_mult
+    // ---------------------------------------------------------
+    printf("\n--- Test 2 : Multiplication de Galois ---\n");
+    // H = une sous-clé aléatoire
+    uint8_t H[16] = {
+        0x66, 0xe9, 0x4b, 0xd4, 0xef, 0x8a, 0x2c, 0x3b,
+        0x88, 0x4c, 0xfa, 0x59, 0xca, 0x34, 0x2b, 0x2e
+    };
+    // L'élément neutre "1" dans GF(2^128) tel que défini par le NIST
+    uint8_t identity[16] = {
+        0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    uint8_t Z[16] = {0};
+    
+    print_block("Valeur de H", H);
+    gcm_mult(H, identity, Z);
+    print_block("H * 1      ", Z);
+    // Le résultat attendu doit être EXACTEMENT identique à H !
+
+    // ---------------------------------------------------------
+    // TEST 3 : ghash 
+    // ---------------------------------------------------------
+    printf("\n--- Test 3 : Compression GHASH ---\n");
+    uint8_t data_to_hash[32] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, // Bloc 1
+        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, // Bloc 2
+        0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
+    };
+    uint8_t hash_out[16];
+    ghash(H, data_to_hash, 32, hash_out);
+    print_block("GHASH Out  ", hash_out);
+    // On vérifie juste que ça calcule une empreinte sans erreur mémoire.
+    
+    printf("=== FIN DES TESTS ===\n\n");
+}
+
+// Test pour visualiser le piège Little-Endian vs Big-Endian
+void test_endianness() {
+    printf("\n=== DEBUT DU TEST ENDIANNESS ===\n");
+
+    // Notre nombre de 64 bits (8 octets)
+    uint64_t val = 0x1122334455667788;
+
+    uint8_t buffer_memoire[8]   = {0};
+    uint8_t buffer_gcm[8]       = {0};
+
+    // 1. Copie en mémoire
+    memcpy(buffer_memoire, &val, 8);
+
+    // 2. Copie par notre fonction Big-Endian
+    uint64_t val_temp = val;
+    for (int i = 7; i >= 0; i--) {
+        buffer_gcm[i] = (uint8_t)(val_temp & 0xFF);
+        val_temp >>= 8;
+    }
+
+    // --- AFFICHAGE ---
+    printf("Valeur d'origine (en hex) : 0x1122334455667788\n\n");
+
+    printf("1. Copie brute (Little-Endian) :\n");
+    printf("   -> ");
+    for(int i = 0; i < 8; i++) {
+        printf("%02x ", buffer_memoire[i]);
+    }
+
+    printf("\n2. Notre fonction (Big-Endian) :\n");
+    printf("   -> ");
+    for(int i = 0; i < 8; i++) {
+        printf("%02x ", buffer_gcm[i]);
+    }
+    
+    printf("=== FIN DU TEST ===\n\n");
+}
+
 int main(int argc, char *argv[]) {
+    //test_endianness();
+    //test_gcm_math();
+    //return EXIT_SUCCESS;
+    
+    
     bool encrypting = true;                     // Par défaut, on chiffre
     AES_KEY_SIZE current_key_size = AES_128;    // 128 bits par défaut
     BLOCK_CIPHER_MODE current_mode = MODE_ECB;  // ECB par défaut
@@ -424,8 +596,10 @@ int main(int argc, char *argv[]) {
                     current_mode = MODE_CFB;
                 } else if (strcmp(optarg, "ofb") == 0) {
                     current_mode = MODE_OFB;
-                } else {
-                    fprintf(stderr, "Erreur : mode inconnu. Utiliser 'ecb', 'cbc', 'cfb' ou 'ofb'.\n");
+                } else if (strcmp(optarg, "gcm") == 0) {
+                    current_mode = MODE_GCM;
+                }else {
+                    fprintf(stderr, "Erreur : mode inconnu. Utiliser 'ecb', 'cbc', 'cfb', 'ofb' ou 'gcm'.\n");
                     return EXIT_FAILURE;
                 }
                 break;
@@ -493,6 +667,7 @@ int main(int argc, char *argv[]) {
     if (current_mode == MODE_CBC) mode_str = "CBC";
     if (current_mode == MODE_CFB) mode_str = "CFB";
     if (current_mode == MODE_OFB) mode_str = "OFB";
+    if (current_mode == MODE_GCM) mode_str = "GCM";
 
     printf("Opération terminée avec succès (AES-%d %s).\n", current_key_size * 8, mode_str);
     

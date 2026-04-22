@@ -1,4 +1,7 @@
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include "../include/aes.h"
 
 // S-box : table de substitution pour le chiffrement AES
@@ -303,10 +306,10 @@ Le nombre de tours (NR) s'adapte dynamiquement (10, 12 ou 14) en fonction
 de la taille de la clé fournie.
 
 Paramètres :
-  - in       : Bloc de texte en clair (16 octets).
-  - key      : Clé de chiffrement maître.
-  - out      : Bloc de texte chiffré généré (16 octets).
-  - key_size : Taille de la clé maître.
+    - in       : Bloc de texte en clair (16 octets).
+    - key      : Clé de chiffrement maître.
+    - out      : Bloc de texte chiffré généré (16 octets).
+    - key_size : Taille de la clé maître.
 */
 void aes_cipher(const uint8_t in[16], const uint8_t *key, uint8_t out[16], AES_KEY_SIZE key_size) {
     state_t state;
@@ -422,9 +425,9 @@ adapté pour les corps finis. La fonction s'appuie sur la primitive xtime()
 pour multiplier par 2 à chaque itération.
 
 Paramètres :
-  - x, y : Les deux octets (polynômes) à multiplier.
+    - x, y : Les deux octets (polynômes) à multiplier.
 Retourne :
-  - Le produit x * y dans GF(2^8).
+    - Le produit x * y dans GF(2^8).
 */
 static uint8_t multiply(uint8_t x, uint8_t y) {
     uint8_t result = 0;
@@ -480,10 +483,10 @@ Applique les opérations inverses dans l'ordre mathématique approprié pour
 retrouver le bloc de texte clair original à partir d'un bloc chiffré.
 
 Paramètres :
-  - in       : Bloc de texte chiffré (16 octets).
-  - key      : Clé de chiffrement maître.
-  - out      : Bloc de texte clair restitué (16 octets).
-  - key_size : Taille de la clé maître.
+    - in       : Bloc de texte chiffré (16 octets).
+    - key      : Clé de chiffrement maître.
+    - out      : Bloc de texte clair restitué (16 octets).
+    - key_size : Taille de la clé maître.
 */
 void aes_decipher(const uint8_t in[16], const uint8_t *key, uint8_t out[16], AES_KEY_SIZE key_size) {
     state_t state;
@@ -542,3 +545,421 @@ void aes_decipher(const uint8_t in[16], const uint8_t *key, uint8_t out[16], AES
         }
     }
 }
+
+/* 
+Fonction : get_msb_s
+--------------------
+Extrait les 's' bits de poids forts (Most Significant Bits) d'un tableau.
+Correspond à la fonction MSB_s définie dans le NIST SP 800-38D (Section 6.1).
+Note : 's_bits' doit être un multiple de 8.
+
+Paramètres : 
+    - in        : Tableau source.
+    - out       : Tableau de destination.
+    - s_bits    : Nombre de bits à extraire. 
+*/
+static void get_msb_s(const uint8_t *in, uint8_t *out, size_t s_bits) {
+    size_t s_bytes = s_bits / 8;
+    memcpy(out, in, s_bytes);
+}
+
+/*
+Fonction : increment_counter
+----------------------------
+Incrémente les 32 bits de droites (4 octets) d'un bloc de 16 octets.
+Correspond à la fonction inc_32 spécifié dans le NIST 800-38D (Section 6.2).
+Les 96 bits de gauche restent inchangés. Fonction essentielle pour générer 
+la séquence de compteurs en mode CTR et GCM.
+
+Remarque : Cette écriture de la fonction est plus efficace sans utiliser 
+MSB et LSB.
+
+Paramètres :
+    - counter : Bloc de compteur de 16 octets.
+*/
+void increment_compteur(uint8_t counter[16]) {
+    for (int i = 15; i >= 12; i--) {
+        counter[i]++;
+        if (counter[i] != 0x00) {
+            break;  // Pas de retenue, on arrête l'incrémentation
+        }
+    }
+}
+
+/*  
+Fonction utilitaire : get_bit_at
+--------------------------------
+Extrait le i-ème bit d'un bloc de 16 octets (de gauche à droite).
+Correspond à la notation xi de la séquence de bits x0, x1, ..., x127 
+dans le NIST SP 800-38D (Section 6.3, Étape 2).
+
+Paramètres :
+  - block : Le bloc de 16 octets.
+  - i     : L'index du bit (de 0 à 127).
+Retourne : 0 ou 1.*/
+static uint8_t get_bit_at(const uint8_t block[16], int i) {
+    int byte_index = i / 8;
+    int bit_index = 7 - (i % 8);
+    return (block[byte_index] >> bit_index) & 1;
+}
+
+/*
+Fonction : right_shift_block
+----------------------------
+Effectue un décalage d'un bit vers la droite (>> 1) sur un bloc 
+entier de 128 bits. Les bits de poids faible glissent vers le 
+poids fort de l'octet suivant.
+Correspond à l'opération (Vi >> 1) du NIST SP 800-38D (Section 6.3).
+
+Paramètres :
+  - block : Le bloc de 16 octets (modifié en place).
+*/
+static void right_shift_block(uint8_t block[16]) {
+    uint8_t carry = 0;
+    for (int j = 0; j < 16; j++) {
+        // La retenue pour l'octet suivant est le bit de poids faible actuel
+        uint8_t next_carry = (block[j] & 1) << 7; 
+        block[j] = (block[j] >> 1) | carry;
+        carry = next_carry;
+    }
+}
+
+/* 
+Fonction utilitaire : xor_blocks
+-----------------------------------
+Applique XOR entre deux blocks de 16 octets
+*/
+void xor_blocks(uint8_t *dest,const uint8_t *src) {
+    for (int i = 0; i < 16; i++) {
+        dest[i] ^= src[i];
+    }
+}
+
+/*
+Fonction : gcm_mult
+-------------------
+Multiplication de deux blocs dans le corps de Galois GF(2^128).
+Utilisé par le mode GCM pour calculer l'authentification (GHASH).
+Implémentation fidèle de "Algorithm 1" (NIST SP 800-38D, Section 6.3).
+
+Paramètres : 
+    - X : Premier bloc opérante (16 octets).
+    - Y : Deuxième bloc opérante (16 octets).
+    - Z : Bloc résultant de l'opération X • Y (16 octets).
+*/
+void gcm_mult(const uint8_t X[16],const uint8_t Y[16], uint8_t Z[16]) {
+    uint8_t V[16];
+
+    // Constante R = 11100001 || 0^120 (NIST SP 800-38D, Section 6.3)
+    uint8_t R[16] = {0xE1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+    // Étape 1 & 2 : Z0 = 0^128 et V0 = Y
+    memset(Z, 0, 16);
+    memcpy(V, Y, 16);
+
+    // Étape 3 : Boucle pour i = 0 à 127
+    for (int i = 0; i < 128; i++) {
+
+        // On extrait xi désigne le bit courant de X
+        uint8_t x_i = get_bit_at(X, i);
+
+        // Calcul de Zi+1
+        if (x_i == 1) {
+            xor_blocks(Z, V); // Zi+1 = Zi XOR Vi
+        } // Sinon, Zi+1 = Zi
+
+        // Extraction de LSB_1(Vi) avant de décaler V
+        uint8_t lsb_V = V[15] & 1;
+
+        // Calcul de Vi+1
+        right_shift_block(V); // Vi >> 1
+
+        if (lsb_V == 1) {
+            xor_blocks(V, R); // Vi+1 = (Vi >> 1) XOR R
+        }
+    }
+    // Étape 4 : Retourne Z (qui contient Z_128)
+}
+
+/*
+Fonction : ghash
+----------------
+Calcule l'empreinte d'authentification GHASH sur un ensemble de données.
+Implémentation fidèle de "Algorithm 2" (NIST SP 800-38D, Section 6.4).
+Cette fonction divise les données d'entrée en blocs de 16 octets et les
+compresse successivement en utilisant la multiplication dans GF(2^128).
+
+Paramètres :
+    - H         : La sous-clé de hachage de 16 octets (Hash subkey).
+    - X         : Pointeur vers les données d'entrée. Sa taille en octets doit
+                obligatoirement être un multiple de 16.
+    - len_bytes : La taille totale des données X en octets.
+    - Y         : Le bloc de sortie résultant (16 octets).
+*/
+void ghash(const uint8_t H[16], const uint8_t *X, size_t len_bytes, uint8_t Y[16]) {
+    
+    // Étape 1 : X est découpé en block de 16 octets (X1, ..., Xm)
+    size_t m = len_bytes / 16;
+    uint8_t temp_mult[16];
+
+    // Étape 2 : Y0 est le "zero block" (128 bits à 0)
+    memset(Y, 0, 16);
+
+    // Étape 3 : Boucle sur chaque bloc Xi
+    for (size_t i = 0; i < m; i++) {
+        // Opération : (Yi-1 XOR Xi)
+        for (int j = 0; j < 16; j++) {
+            Y[j] ^= X[i * 16 + j];
+        }
+
+        // Opération : • H
+        // Remarque : on multiplie par la sous-clé H. On utilise temp_mult en sortie 
+        // pour éviter d'écraser Y pendant l'initialisation dans gcm_mult.
+        gcm_mult(Y, H, temp_mult);
+
+        // Le résultat devient le nouveau Yi pour le prochain tour
+        memcpy(Y, temp_mult, 16);
+    }
+    // Étape 4 : Y contient maintenant Ym
+}
+
+/*
+Fonction : gctr
+---------------
+Implémente la fonction GCTR (Galois Counter) définie dans le NIST SP 800-38D
+(Algo 3, Section 6.5).
+Chiffre et déchiffre les données en utilisant le mode Counter. La grande force
+du GCTR est qu'il n'utilise aucun padding : le dernier bloc est tronqué.
+
+Paramètres : 
+    - ICB       : Initial Counter Block (16 octets). Bloc de compteur de départ.
+    - X         : Données d'entrée (texte clair / chiffré).
+    - len_bytes : Taille totale des données X en octets.
+    - key       : Clé de chiffrement maître.
+    - key_size  : Taille de la clé maître.
+    - Y         : Tampon de sortie (même taille que X à allouer).
+*/
+void gctr(uint8_t ICB[16], const uint8_t *X, size_t len_bytes, const uint8_t *key, AES_KEY_SIZE key_size, uint8_t *Y) {
+    
+    // Étape 1 : Si rien à dé/chiffrer
+    if (len_bytes == 0) { 
+        return; // 
+    }
+
+    uint8_t CB[16];
+    uint8_t CIPH[16];
+
+    // Étape 2 : Calcul du nombre total de blocs 'n'
+    size_t n = (len_bytes + 15) / 16;
+    
+    // Étape 4 : CB1 = ICB
+    memcpy(CB, ICB, 16);
+
+    // Étape 5 & 6 : Boucles sur les blocs
+    for (size_t i = 0; i < n; i++) {
+        aes_cipher(CB, key, CIPH, key_size);
+
+        // Détermination de la taille du bloc courant
+        size_t block_len = 16;
+        if (i == n - 1 && (len_bytes % 16) != 0) {
+            block_len = len_bytes % 16;
+        }
+
+        for (size_t j = 0; j < block_len; j++) {
+            Y[i * 16 + j] = X[i * 16 + j] ^ CIPH[j];
+        }
+
+        if (i < n - 1) {
+            increment_compteur(CB);
+        }
+    }
+}
+
+/*
+Fonction utilitaire : put_uint64_be
+-----------------------------------
+Insère un entier de 64 bits en format Big-Endiandans un tableau d'octets.
+Indispensable pour formater les longueurs dans le bloc final du GHASH.
+*/
+static void put_uint64_be(uint64_t val, uint8_t *out) {
+    for (int i = 7; i >= 0; i--) {
+        out[i] = (uint8_t)(val & 0xFF);
+        val >>= 8;
+    }
+}
+
+/*
+Fonction : gcm_encrypt_ae
+-------------------------
+Chiffrement Authentifié GCM (GCM-AE).
+Implémente "Algorithm 4" (NIST SP 800-38D, Section 7.1).
+
+Paramètres :
+    - key, key_size : La clé maître AES et sa taille.
+    - iv            : Le Vecteur d'Initialisation (Recommandé et forcé ici à 12 octets / 96 bits).
+    - aad, aad_len  : Additional Authenticated Data (peut être NULL / 0).
+    - pt, pt_len    : Plaintext (texte clair à chiffrer).
+    - ct            : Tampon de sortie pour le Ciphertext (même taille que pt).
+    - tag           : Tampon de sortie pour le Tag d'authentification.
+    - tag_len       : Taille désirée du Tag en octets (ex: 16 pour 128 bits).
+*/
+void gcm_encrypt_ae(const uint8_t *key, AES_KEY_SIZE key_size, const uint8_t iv[12], const uint8_t *aad, size_t aad_len, const uint8_t *pt, size_t pt_len, uint8_t *ct, uint8_t *tag, size_t tag_len) {
+    uint8_t H[16];
+    uint8_t zeros[16] = {0};
+
+    // 1. Génération de H = CIPH_K(0^128)
+    aes_cipher(zeros, key, H, key_size);
+
+    // 2. Définition de J0 (avec le standard 96 bits pour IV)
+    uint8_t J0[16] = {0};
+    memcpy(J0, iv, 12);
+    J0[15] = 0x01; // On ajoute 0^31 || 1 à la fin
+    
+    // 3. Calcul du Ciphertext (C) avec GCTR
+    uint8_t J0_inc[16];
+    memcpy(J0_inc, J0, 16);
+    increment_compteur(J0_inc); // Le compteur démarre à J0 + 1
+    gctr(J0_inc, pt, pt_len, key, key_size, ct);
+
+    // 4. Préparation du bloc de donnée pour GHASH
+    //      (A∣∣0^v∣∣C∣∣0^u∣∣[len(A)]_64​∣∣[len(C)]_64​)
+    // Calcul du padding u et v pour s'aligner sur des blocs de 16 octets
+    size_t u = (16 - (pt_len % 16)) % 16;
+    size_t v = (16 - (aad_len % 16)) % 16;
+    size_t ghash_in_len = pt_len + u + aad_len + v + 16; // +16 pour le bloc des longueurs
+
+    // calloc initialise tout à 0, ce qui gère le padding de u et v
+    uint8_t *ghash_in = calloc(ghash_in_len, 1);
+
+    size_t offset = 0;
+
+    // 4a. Ajout de AAD
+    if (aad_len > 0) {
+        memcpy(ghash_in + offset, aad, aad_len);
+    }
+    offset += aad_len + v; // On saute le padding (qui est déjà à 0)
+    
+    // 4b. Ajout du Ciphertext
+    if (pt_len > 0) {
+        memcpy(ghash_in + offset, ct, pt_len);
+    }
+    offset += pt_len + u; // On saute le padding
+    
+    // 4c. Ajout des longueurs en BITS (sur 64 bits chacune)
+    uint64_t aad_bit_len = (uint64_t)aad_len * 8;
+    uint64_t pt_bit_len  = (uint64_t)pt_len * 8;
+    put_uint64_be(aad_bit_len, ghash_in + offset);
+    put_uint64_be(pt_bit_len, ghash_in + offset + 8);
+    
+    // 5. Calcul de S = GHASH_H(A || pad(A) || C || pad(C) || len(A) || len(C))
+    uint8_t S[16];
+    ghash(H, ghash_in, ghash_in_len, S);
+    free(ghash_in); // On libère la mémoire
+    
+    // 6. Calcul du Tag final (T) = MSB_t(GCTR_K(J0, S))
+    uint8_t full_tag[16];
+    gctr(J0, S, 16, key, key_size, full_tag);
+    
+    get_msb_s(full_tag, tag, tag_len * 8);
+}
+
+/*
+Fonction : gcm_decrypt_ad
+-------------------------
+Déchiffrement Authentifié GCM (GCM-AD).
+Implémente "Algorithme 5" (NIST 800-38D, Section 7.2).
+
+Paramètres :
+  - key, key_size : La clé maître AES et sa taille.
+  - iv            : Le Vecteur d'Initialisation (12 octets / 96 bits).
+  - aad, aad_len  : Additional Authenticated Data (peut être NULL / 0).
+  - ct, ct_len    : Ciphertext (texte chiffré à vérifier et déchiffrer).
+  - expected_tag  : Le Tag d'authentification lu dans le fichier/message.
+  - tag_len       : Taille du Tag en octets (ex: 16).
+  - pt            : Tampon de sortie pour le Plaintext (même taille que ct).
+
+Retourne :
+  - true (1) si le Tag est valide (Authenticité garantie).
+  - false (0) si le Tag est invalide (Fichier corrompu ou piraté !).
+*/
+bool gcm_decrypt_ad(const uint8_t *key, AES_KEY_SIZE key_size, const uint8_t iv[12], const uint8_t *aad, size_t aad_len, const uint8_t *ct, size_t ct_len, const uint8_t *expected_tag, size_t tag_len, uint8_t *pt) {
+    
+    uint8_t H[16];
+    uint8_t zeros[16] = {0};
+
+    // 1. Génération de H = CIPH_K(0^128)
+    aes_cipher(zeros, key, H, key_size);
+
+    // 2. Définition de J0
+    uint8_t J0[16] = {0};
+    memcpy(J0, iv, 12);
+    J0[15] = 0x01;
+
+    // 3. Préparation du bloc de données pour GHASH
+    size_t u = (16 - (ct_len % 16)) % 16;
+    size_t v = (16 - (aad_len % 16)) % 16;
+    size_t ghash_in_len = ct_len + u + aad_len + v + 16;
+
+    // calloc initialise tout à 0, ce qui gère le padding de u et v
+    uint8_t *ghash_in = calloc(ghash_in_len, 1);
+
+    size_t offset = 0;
+
+    // 4a. Ajout de AAD
+    if (aad_len > 0) {
+        memcpy(ghash_in + offset, aad, aad_len);
+    }
+    offset += aad_len + v; // On saute le padding (qui est déjà à 0)
+    
+    // 4b. Ajout du Ciphertext
+    if (ct_len > 0) {
+        memcpy(ghash_in + offset, ct, ct_len);
+    }
+    offset += ct_len + u; // On saute le padding
+    
+    // 4c. Ajout des longueurs en BITS (sur 64 bits chacune)
+    uint64_t aad_bit_len = (uint64_t)aad_len * 8;
+    uint64_t pt_bit_len  = (uint64_t)ct_len * 8;
+    put_uint64_be(aad_bit_len, ghash_in + offset);
+    put_uint64_be(pt_bit_len, ghash_in + offset + 8);
+    
+    // 6. Calcul de S = GHASH_H(A || pad(A) || C || pad(C) || len(A) || len(C))
+    uint8_t S[16];
+    ghash(H, ghash_in, ghash_in_len, S);
+    free(ghash_in); // On libère la mémoire
+    
+    // 7. Calcul du Tag (T')
+    uint8_t full_tag[16];
+    gctr(J0, S, 16, key, key_size, full_tag);
+
+    uint8_t calculated_tag[16];
+    get_msb_s(full_tag, calculated_tag, tag_len * 8);
+
+    // 8. Vérification Cryptographique
+    uint8_t diff = 0;
+    for (size_t i = 0; i < tag_len; i++) {
+        diff |= (calculated_tag[i] ^ expected_tag[i]);
+    }
+    
+    if (diff != 0) {
+        // ALERTE : Le tag ne correspond pas ! FAIL.
+        return false;
+    }
+
+    // Si (et seulement si) le tag est valide, on déchiffre !
+    uint8_t J0_inc[16];
+    memcpy(J0_inc, J0, 16);
+    increment_compteur(J0_inc);
+    
+    gctr(J0_inc, ct, ct_len, key, key_size, pt);
+    
+    return true; // Succès !
+
+}
+
+
+
+
+
+

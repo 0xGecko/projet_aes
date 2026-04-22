@@ -2,6 +2,7 @@
 #define AES_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 // Le nombre de colonnes de l'État (State) est toujours de 4 pour l'AES
 #define NB 4
@@ -57,5 +58,24 @@ void inv_mix_columns(state_t state);
 // NOUVEAU PROTOTYPE : 'key' devient un pointeur
 void aes_decipher(const uint8_t in[16], const uint8_t *key, uint8_t out[16], AES_KEY_SIZE key_size);
 
+// Prototype : Incrémente 32 bits les plus à droite dans un bloc de 16 octets
+void increment_compteur(uint8_t counter[16]);
 
+//  Prototype : Applique XOR entre deux blocks de 16 octets
+void xor_blocks(uint8_t *dest, const uint8_t *src);
+
+// Prototype : Multiplie 2 blocs de 16 octets dans GF(2^128)
+void gcm_mult(const uint8_t X[16],const uint8_t Y[16], uint8_t Z[16]);
+
+// Prototype : Calcule l'empreinte d'authentification GHASH sur un ensemble de données.
+void ghash(const uint8_t H[16], const uint8_t *X, size_t len_bytes, uint8_t Y[16]);
+
+// Prototype : Implémente la fonction GCTR (Galois Counter)
+void gctr(uint8_t ICB[16], const uint8_t *X, size_t len_bytes, const uint8_t *key, AES_KEY_SIZE key_size, uint8_t *Y);
+
+// Prototype : Chiffrement Authentifié GCM (GCM-AE)
+void gcm_encrypt_ae(const uint8_t *key, AES_KEY_SIZE key_size, const uint8_t iv[12], const uint8_t *aad, size_t aad_len, const uint8_t *pt, size_t pt_len, uint8_t *ct, uint8_t *tag, size_t tag_len);
+
+// Prototype : Déchiffrement Authentifié GCM (GCM-AD)
+bool gcm_decrypt_ad(const uint8_t *key, AES_KEY_SIZE key_size, const uint8_t iv[12], const uint8_t *aad, size_t aad_len, const uint8_t *ct, size_t ct_len, const uint8_t *expected_tag, size_t tag_len, uint8_t *pt);
 #endif /* AES_H */
