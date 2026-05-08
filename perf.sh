@@ -1,14 +1,28 @@
-#! /bin/bash
+#!/bin/bash
 
-# Petit script pour tester les performances de notre AES
+# Configuration des chemins
+INPUT="data/clear/alice.txt"
+OUTPUT="alice_perf.enc"
 
-echo "Lancement du test de performance (100 chiffrements de alice.sage)..."
+# 1. Vérification de la présence du programme
+if [ ! -f "./aes" ]; then
+    echo "Erreur : L'exécutable ./aes est introuvable. Lancez 'make all' d'abord."
+    exit 1
+fi
 
-# On boucle 100 fois
-for i in {1..100}
-do 
-    # On appelle le programme en mode silencieux pour ne pas polluer l'écran
-    ./aes -e data/clear/alice.sage data/encrypted/alice.enc > /dev/null
+echo "========================================================="
+echo "   🚀 DÉMARRAGE DU TEST DE PERFORMANCE (100 Itérations)"
+echo "   Mode : AES-128 ECB (Clé par défaut)"
+echo "========================================================="
+
+# 3. La boucle de 100 chiffrements chronométrée
+time for i in {1..100}; do
+    ./aes -e -m ecb "$INPUT" "$OUTPUT" > /dev/null
 done
 
-echo "Test de chiffrement terminé !"
+echo "========================================================="
+echo "   ✅ TEST TERMINÉ !"
+echo "========================================================="
+
+# Nettoyage optionnel du fichier chiffré de test
+rm -f "$OUTPUT"

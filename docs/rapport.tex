@@ -1,0 +1,159 @@
+\documentclass[12pt,a4paper]{article}
+
+% Packages pour le français et les caractères spéciaux
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+% Marges et mise en page
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+
+% Pour les mathématiques
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+% Pour les liens cliquables
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue
+}
+
+% Pour insérer des images
+\usepackage{graphicx}
+
+\begin{document}
+
+% --- DÉBUT DE LA PAGE DE GARDE ---
+\begin{titlepage}
+    \centering
+    
+    \includegraphics[width=5cm]{logo_univ_rennes_1.png}\par
+    \vspace{1.5cm}
+    
+    {\scshape\Large Université de Rennes \\ Master Mathématiques et Applications\\
+    \vspace{0.3cm}
+    \large Parcours Mathématiques de l'information, cryptographie\par}
+    \vspace{2cm}
+    
+    {\huge\bfseries Rapport d'Implémentation\par}
+    \vspace{0.5cm}
+    {\Large Moteur cryptographique AES et chiffrement authentifié GCM\par}
+    \vspace{2cm}
+    
+    {\Large\itshape Alexandre ACCIARI\par}
+    \vfill
+    
+    Professeur : Sylvain Duquesne\par
+    \vspace{1cm}
+    
+    {\large \today\par}
+\end{titlepage}
+% --- FIN DE LA PAGE DE GARDE ---
+
+% --- RÉSUMÉ ---
+\begin{abstract}
+Ce rapport détaille l'implémentation complète et à partir de zéro de l'algorithme de chiffrement AES (128, 192 et 256 bits) en langage C. Il présente l'architecture du code, les solutions mathématiques apportées pour les calculs dans le corps de Galois, ainsi que la gestion rigoureuse des fichiers via différents modes opératoires (ECB, CBC, CFB, OFB), Le projet possède aussi l'implémentation du chiffrement et du déchiffrement authentifié GCM (Galois/Counter Mode), assurant à la fois confidentialité et intégré des données par un code d'authentification de message (MAC). Enfin, une analyse des défis techniques rencontrés met en évidence les exigences du développement cryptographique, notamment la gestion de l'endianness et la sécurité mémoire.
+\end{abstract}
+\vspace{1cm}
+
+% --- SOMMAIRE ---
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introduction}
+L'objectif de ce projet est le développement d'un moteur cryptographique robuste basé sur l'\textbf{Advanced Encryption Standard (AES)}. Contrairement à une utilisation de bibliothèques haut niveau, ce travail impose une compréhension granulaire de la norme \textbf{FIPS-197} \cite{fips197}. L'implémentation repose sur une architecture de réseau de substitution-permutation (SPN), garantissant une confusion et une diffusion optimales des données.
+
+Au-delà de l'algorithme de bloc, nous avons implémenté les modes opératoires classiques (\textbf{ECB}, \textbf{CBC}, \textbf{CFB}, \textbf{OFB}) pour permettre le traitement de flux de données réels. Cette étape a nécessité une attention particulière à la gestion du remplissage via le standard \textbf{PKCS \#7} \cite{rfc2315}. Enfin, l'implémentation du mode \textbf{GCM} (Galois/Counter Mode) répond aux besoins modernes de sécurité AEAD (Authenticated Encryption with Associated Data), intégrant l'authentification directement dans le processus de chiffrement conformément à la spécification \textbf{NIST SP 800-38D} \cite{sp80038d}.
+
+\section{Architecture du Code}
+Afin de garantir un code propre en suivant les bonnes pratiques de développement en C, le projet est structuré de manière modulaire pour séparer les primitives cryptographiques de la gestion de fichiers.\\
+
+\begin{itemize}
+    \item \textbf{Le cœur cryptographique (\texttt{src/aes.c} et \texttt{include/aes.h}) :} 
+    Il implémente les fonctions de base (SubBytes, ShiftRows, MixColumns, AddRoundKey). La conception utilise des types de données fixes (\texttt{uint8\_t}) pour garantir la portabilité. L'arithmétique dans $GF(2^{128})$ pour le mode GCM est isolée afin d'optimiser les multiplications polynomiales.
+    
+    \item \textbf{L’interface utilisateur et la gestion des I/O (\texttt{src/main.c}) :} Ce composant constitue le point d'entrée du programme. Il gère le parsing des arguments via \texttt{getopt\_long}, l'allocation dynamique de la mémoire, le découpage des flux en blocs itératifs, l'application du padding PKCS \#7, et la validation cryptographique finale des tags GCM.\\
+    
+    \item \textbf{L'automatisation (\texttt{Makefile}) :} Un système de compilation automatisé a été mis en place.L'utilisation de drapeaux de compilation stricts (\texttt{-Wall -Wextra}) a permis de sécuriser le code contre les comportements indéfinis, tandis que le drapeau \texttt{-O3} a été crucial pour optimiser les performances des nombreuses boucles mathématiques lors de l'exécution.\\
+
+\end{itemize}
+
+\section{Le Moteur AES et l'Arithmétique des Corps Finis}
+
+L'algorithme AES opère sur une matrice d'état (\textit{State}) de 4 lignes et 4 colonnes, représentant un bloc de 16 octets.
+
+\subsection{Flexibilité des clés et Key Expansion}
+Pour répondre aux besoins de sécurité variables, notre implémentation supporte dynamiquement les clés de 128, 192 et 256 bits. La fonction d'expansion de clé s'adapte mathématiquement à la taille fournie ($N_k = 4, 6 \text{ ou } 8$ mots de 32 bits) pour déduire le nombre de tours requis ($N_r = 10, 12 \text{ ou } 14$). Remarque, une attention particulière a été portée à la spécificité mathématique de l'AES-256 : lorsque $N_k > 6$, l'algorithme exige une étape de substitution non linéaire supplémentaire (\texttt{SubWord}) au milieu de la génération des clés de tours pour éviter l'effritement de l'entropie \cite{fips197}.
+
+\subsection{Arithmétique dans le Corps de Galois $\mathrm{GF}(2^8)$}
+L'une des difficultés majeures de l'implémentation logicielle réside dans l'étape \texttt{MixColumns}. Cette transformation nécessite des multiplications matricielles qui ne s'effectuent pas dans l'arithmétique standard, mais dans le corps fini de Galois $\mathrm{GF}(2^8)$, défini par le polynôme irréductible $P(x) = x^8 + x^4 + x^3 + x + 1$.
+
+Pour transposer ces calculs en langage machine de manière performante, nous avons développé la fonction fondamentale \texttt{xtime}. Cette fonction effectue une multiplication par le polynôme $x$ (soit la valeur hexadécimale \texttt{0x02}) via un décalage binaire vers la gauche (\verb|<< 1|), suivi d'un \textit{XOR} conditionnel avec la constante \texttt{0x1B} si un dépassement de capacité (débordement du bit de poids fort) survient. Les multiplications par des scalaires plus complexes, indispensables notamment pour l'opération \texttt{InvMixColumns} lors du déchiffrement (multiplications par \texttt{0x09}, \texttt{0x0B}, \texttt{0x0D} et \texttt{0x0E}), ont été construites par un algorithme de type \textit{shift-and-add} basé sur \texttt{xtime}.
+
+\section{Modes Opératoires Classiques et Traitement des Fichiers}
+
+L'AES étant un algorithme de chiffrement par blocs, la sécurisation d'un fichier de taille arbitraire nécessite un "Mode d'Opération".
+
+\subsection{De la vulnérabilité de l'ECB à la sécurité du CBC}
+Nous avons initialement implémenté le mode \textbf{ECB (\textit{Electronic Codebook})}, qui chiffre chaque bloc indépendamment. Cependant, ce mode présente un défaut cryptographique majeur : deux blocs de texte clair identiques produiront un texte chiffré identique, préservant ainsi les structures visuelles (comme l'illustre classiquement le chiffrement d'une image bitmap non compressée).
+
+Pour pallier ce défaut, nous avons intégré le mode \textbf{CBC (\textit{Cipher Block Chaining})}. Ce mode introduit un \textit{Vecteur d'Initialisation (IV)} fourni par l'utilisateur. Chaque bloc de texte clair subit un XOR avec le bloc chiffré précédent avant d'entrer dans l'AES. Cette chaîne de dépendance garantit que des blocs clairs identiques produiront des chiffrés totalement différents, offrant une diffusion parfaite. Les modes \textbf{CFB} et \textbf{OFB} ont également été codés pour offrir des approches par chiffrement de flux (\textit{stream ciphers}), où l'AES est utilisé comme générateur de nombres pseudo-aléatoires.
+
+\subsection{Le standard de remplissage PKCS \#7}
+Dans les modes opératoires par blocs (ECB, CBC), la taille du fichier d'entrée n'est que très rarement un multiple exact de 16 octets. Le document NIST et la RFC 2315 \cite{rfc2315} proposent un mécanisme de \textit{padding} : si le dernier bloc contient $N$ octets de données (avec $N < 16$), il doit être complété par $(16 - N)$ octets ayant tous pour valeur $(16 - N)$.\\
+
+\textbf{Le piège de la fin de fichier parfaite :}\\
+Lors de nos phases de tests, nous avons mis en évidence la nécessité absolue d'appliquer la règle du bloc supplémentaire forcé lorsque le fichier source est un multiple exact de 16 octets. Pour illustrer cette contrainte, nous avons tenté de chiffrer la chaîne de caractères \textit{"Cryptomonnaie !\textbackslash n"}. Cette chaîne, avec son caractère de saut de ligne final (\texttt{\textbackslash n}), pèse très exactement 16 octets.
+
+Sans l'ajout d'un nouveau bloc complet de remplissage (constitué de 16 octets de valeur \texttt{0x10}), l'algorithme de déchiffrement va lire le dernier octet de la chaîne chiffrée pour en déduire le \textit{padding}. Or, le caractère \texttt{\textbackslash n} correspond à la valeur décimale 10 en ASCII. Le déchiffreur ampute alors silencieusement le message de 10 octets par erreur, restituant ainsi le mot tronqué \textit{"Crypto"}. Cette observation empirique valide de manière frappante l'exigence du standard PKCS \#7 de toujours fournir une indication non ambiguë de la fin du fichier en forçant un bloc complet si nécessaire.
+
+\section{Le Boss Final : Le Mode GCM (AEAD)}
+
+Le projet s'est conclu par l'implémentation du mode \textbf{GCM (Galois/Counter Mode)}, le standard actuel utilisé dans les protocoles sécurisés comme TLS 1.3 \cite{sp80038d}. Ce mode repose sur deux piliers :
+
+\subsection{Confidentialité : Le moteur GCTR}
+La confidentialité est assurée par une variante du mode Counter (CTR). Un compteur de 128 bits, initialisé par un IV (recommandé à 96 bits), est chiffré par l'AES pour créer un flux de clés. L'avantage majeur de ce mode par flot est de rendre le padding PKCS \#7 obsolète : les données n'ont plus besoin d'être alignées sur 16 octets. Le dernier bloc partiel est chiffré par un simple XOR tronqué, optimisant ainsi la taille du fichier de sortie.
+
+\subsection{Authentification : Le hachage universel GHASH}
+L'intégrité est assurée par la fonction \texttt{GHASH}, qui absorbe le texte chiffré et produit un \textit{Tag} d'authentification de 16 octets. L'opération repose sur la multiplication de polynômes dans l'immense corps $\mathrm{GF}(2^{128})$. Au lieu du polynôme réducteur classique de l'AES, GCM utilise $R = 11100001 || 0^{120}$ (\texttt{0xE1...}). L'implémentation de \texttt{gcm\_mult} effectue cette réduction bit par bit, en gérant les décalages croisés de l'ensemble des 128 bits du bloc.
+
+\section{Défis Techniques et Solutions Logicielles}
+
+La traduction de protocoles cryptographiques de très haut niveau en langage C soulève de nombreux défis architecturaux.
+
+\subsection{Sécurité des entrées/sorties et gestion des flux}
+Lors du développement initial, l'utilisation de la fonction standard \texttt{fread()} levait des avertissements de compilation (\texttt{warn\_unused\_result}). Plus grave encore, une implémentation naïve avait conduit à un bug logique de "double lecture" du dernier bloc de fichier lors de l'extraction du Tag GCM. La solution retenue a consisté à encapsuler rigoureusement chaque Input/Output dans des structures conditionnelles, en s'assurant que la variable \texttt{bytes\_read} correspondait exactement à la taille attendue, neutralisant ainsi les comportements indéfinis avant tout traitement cryptographique.
+
+\subsection{Le problème de Boutisme (Endianness)}
+L'algorithme GCM requiert que la taille totale des données soit encodée sur 64 bits en format \textbf{Big-Endian} pour finaliser le dernier bloc du \texttt{GHASH}. Nos processeurs x86 travaillant nativement en \textbf{Little-Endian}, une copie mémoire classique (\texttt{memcpy}) inversait l'ordre des octets, provoquant systématiquement la corruption du Tag final. Nous avons résolu ce problème en concevant une fonction (\texttt{put\_uint64\_be}) utilisant des masques logiques (\verb|& 0xFF|) et des décalages binaires (\verb|>> 8|) pour forcer l'ordre naturel des octets indépendamment de l'architecture matérielle de la machine.
+
+\subsection{Gestion de la mémoire et padding virtuel GCM}
+Enfin, le NIST exige que les données chiffrées entrant dans le \texttt{GHASH} soient concaténées avec des blocs de zéros virtuels (padding mathématique $0^u$ et $0^v$) \cite{sp80038d}. Insérer manuellement ces zéros via des boucles dans des tableaux dynamiques risquait de provoquer des fuites ou des dépassements mémoire. La solution élégante a été d'utiliser l'allocation \texttt{calloc()} native du C, qui initialise d'emblée un grand tampon avec des zéros. En gérant judicieusement un curseur d'écriture (\textit{offset}), les données y ont été superposées, réalisant le padding de manière instantanée et sécurisée.
+
+\newpage
+\renewcommand{\refname}{Bibliographie}
+\begin{thebibliography}{9}
+
+\bibitem{fips197}
+National Institute of Standards and Technology (NIST), 
+\emph{Advanced Encryption Standard (AES)}, 
+Federal Information Processing Standards Publication (FIPS PUB) 197, Novembre 2001.
+
+\bibitem{rfc2315}
+B. Kaliski (RSA Laboratories), 
+\emph{PKCS \#7: Cryptographic Message Syntax Version 1.5}, 
+Request for Comments (RFC) 2315, Network Working Group, Mars 1998.
+
+\bibitem{sp80038d}
+M. Dworkin (NIST),
+\emph{Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC},
+NIST Special Publication 800-38D, Novembre 2007.
+
+\end{thebibliography}
+
+\end{document}

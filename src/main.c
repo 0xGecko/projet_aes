@@ -127,7 +127,7 @@ static void process_file(FILE *in_file, FILE *out_file, bool encrypting, const u
             // --- CHIFFREMENT ECB ---
             while ((bytes_read = fread(buffer, 1, 16, in_file)) > 0) {
                 last_bytes_read = bytes_read; // On mémorise la taille lue
-                if (bytes_read == 16) {
+                if (bytes_read < 16) {
                     // Bloc incomplet : On va appliquer du Padding PKCS#7
                     uint8_t padding_value = 16 - bytes_read;
                     for (size_t i = bytes_read; i < 16; i++) {

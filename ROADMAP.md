@@ -21,9 +21,9 @@
 
 ## Phase 5 : Documentation et compte-rendu
 - [x] Commenter le code de façon claire.
-- [ ] Rédiger la notice d'utilisation.
-- [ ] Décrire le fonctionnement de l'implémentation.
-- [ ] Détailler les difficultés rencontrées et les solutions trouvées.
+- [x] Rédiger la notice d'utilisation.
+- [x] Décrire le fonctionnement de l'implémentation.
+- [x] Détailler les difficultés rencontrées et les solutions trouvées.
 
 ## Phase 6 : Extensions (Les défis finaux)
 

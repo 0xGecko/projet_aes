@@ -22,25 +22,27 @@ Le projet utilise un `Makefile` pour faciliter la compilation. Pour compiler le 
 make clean && make all
 ```
 
-## 💻 Utilisation
+## 💻 Utilisation
 (Cette section sera mis à jour une fois que les options de la ligne de commande seront définies dans le main.c)
 ```bash
 ./aes [options] fichier_entree fichier_sortie
 ```
-Avec comme options disponibles : 
-    -`e`, --`encrypt` : Chiffrer le fichier (Action par défaut).
 
-    -`d`, --`decrypt` : Déchiffrer le fichier.
+### Options disponibles :
 
-    -`s`, --`size`    : Taille de la clé en bits (128 par défaut, 192 ou 256).
+    -e, --encrypt : Chiffrer le fichier (Action par défaut).
 
-    -`m`, --`mode`    : Mode d'opération (`ecb` par défaut, `cbc`, `cfb`, `ofb`, `ctr`, `gcm`).
+    -d, --decrypt : Déchiffrer le fichier.
 
-    -`k`, --`key`     : Spécifier une clé secrète en hexadécimal (ex: 32 caractères pour 128 bits).
+    -s, --size    : Taille de la clé en bits (128 par défaut, 192 ou 256).
 
-    -`v`, --`iv`      : Spécifier un Vecteur d'Initialisation (IV) en hexadécimal (recommandé : 32 caractères).
+    -m, --mode    : Mode d'opération (ecb par défaut, cbc, cfb, ofb, ctr, gcm).
 
-    -`h`, --`help`    : Afficher le menu d'aide.
+    -k, --key     : Spécifier une clé secrète en hexadécimal (ex: 32 caractères pour 128 bits).
+
+    -v, --iv      : Spécifier un Vecteur d'Initialisation (IV) en hexadécimal (recommandé : 32 caractères).
+
+    -h, --help    : Afficher le menu d'aide.
 
 ## 👤 Auteur
 - Alexandre ACCIARI
